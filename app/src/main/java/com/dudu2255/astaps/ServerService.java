@@ -310,7 +310,7 @@ public class ServerService extends Service {
         if (running) return;
         running = true;
         try {
-            if (!new File(rootfs(), "usr").exists()) {
+            if (!new File(rootfs(), "usr").exists() || !new File(files(), "loader").exists()) {
                 if (!installPayload()) {
                     running = false;
                     return;
