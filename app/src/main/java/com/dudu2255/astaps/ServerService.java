@@ -17,6 +17,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +28,9 @@ public class ServerService extends Service {
     public static final String ACTION_IMPORT_JAR = "com.dudu2255.astaps.IMPORT_JAR";
     public static final String ACTION_IMPORT_RES = "com.dudu2255.astaps.IMPORT_RES";
     public static final String ACTION_IMPORT_PLUGIN = "com.dudu2255.astaps.IMPORT_PLUGIN";
+    public static final String ACTION_COMMAND = "com.dudu2255.astaps.COMMAND";
     public static final String EXTRA_URI = "uri";
+    public static final String EXTRA_COMMAND = "command";
 
     public static final String PAYLOAD_URL =
             "https://github.com/DuDu2255/Grasscutter-Android-APK/releases/latest/download/payload.tar.gz";
@@ -40,7 +43,7 @@ public class ServerService extends Service {
 
     private PowerManager.WakeLock wake;
     private Process mongoProc;
-    private Process javaProc;
+    private volatile Process javaProc;
     private Thread worker;
     private volatile boolean stopRequested;
     private int activeImports;
@@ -63,6 +66,11 @@ public class ServerService extends Service {
 
     public static void importPlugin(Context c, Uri uri) {
         send(c, new Intent(c, ServerService.class).setAction(ACTION_IMPORT_PLUGIN).putExtra(EXTRA_URI, uri));
+    }
+
+    public static void sendCommand(Context c, String command) {
+        send(c, new Intent(c, ServerService.class).setAction(ACTION_COMMAND)
+                .putExtra(EXTRA_COMMAND, command));
     }
 
     private static void send(Context c, Intent i) {
@@ -137,6 +145,21 @@ public class ServerService extends Service {
             startImport(() -> doImportPlugin(uri), startId, "astaps-plugin");
             return START_STICKY;
         }
+        if (ACTION_COMMAND.equals(action)) {
+            sendCommandToServer(intent.getStringExtra(EXTRA_COMMAND));
+            boolean idle;
+            synchronized (this) {
+                idle = activeImports == 0 && !running
+                        && (worker == null || !worker.isAlive());
+            }
+            if (idle) {
+                if (wake != null && wake.isHeld()) wake.release();
+                stopForeground(true);
+                stopSelfResult(startId);
+                return START_NOT_STICKY;
+            }
+            return START_STICKY;
+        }
         if (worker == null || !worker.isAlive()) {
             stopRequested = false;
             worker = new Thread(this::runServer, "astaps-server");
@@ -191,6 +214,12 @@ public class ServerService extends Service {
         File d = new File(files(), "logs");
         d.mkdirs();
         return new File(d, "server.log");
+    }
+
+    public static File mongoLogFile(Context context) {
+        File d = new File(context.getFilesDir(), "logs");
+        d.mkdirs();
+        return new File(d, "mongodb.log");
     }
 
     public static File masterConfig(Context c) {
@@ -411,6 +440,25 @@ public class ServerService extends Service {
         return pb.start();
     }
 
+    private void sendCommandToServer(String command) {
+        String line = command == null ? "" : command.trim();
+        if (line.isEmpty() || line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) return;
+        Process process = javaProc;
+        if (process == null || !process.isAlive()) {
+            setStatus("服务端未运行，无法发送指令");
+            return;
+        }
+        try {
+            OutputStream input = process.getOutputStream();
+            input.write((line + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            input.flush();
+            log("> " + line);
+        } catch (IOException e) {
+            log("发送指令失败: " + e);
+            setStatus("指令发送失败：" + e.getMessage());
+        }
+    }
+
     private void runServer() {
         if (running) return;
         running = true;
@@ -439,6 +487,7 @@ public class ServerService extends Service {
             }
 
             File log = logFile();
+            File mongoLog = mongoLogFile(this);
             try {
                 File mongod = new File(rootfs(), "opt/mongodb/bin/mongod");
                 android.system.StructStat st = android.system.Os.stat(mongod.getAbsolutePath());
@@ -452,7 +501,7 @@ public class ServerService extends Service {
                         "/opt/mongodb/bin/mongod",
                         "--dbpath", "/opt/astaps/data/db",
                         "--bind_ip", "127.0.0.1",
-                        "--port", "27017", "--quiet"), log);
+                        "--port", "27017", "--quiet"), mongoLog);
                 for (int i = 0; i < 90 && !Util.portOpen("127.0.0.1", 27017); i++) {
                     if (stopRequested) return;
                     if (!mongoProc.isAlive()) break;

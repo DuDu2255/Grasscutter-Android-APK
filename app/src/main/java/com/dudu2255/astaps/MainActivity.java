@@ -8,9 +8,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.inputmethod.EditorInfo;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -27,6 +29,9 @@ public class MainActivity extends Activity {
     private TextView statusView;
     private TextView infoView;
     private TextView logView;
+    private EditText commandInput;
+    private int selectedLog;
+    private String displayedLog;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private final Runnable tick = new Runnable() {
@@ -87,6 +92,17 @@ public class MainActivity extends Activity {
         root.addView(row4);
         row4.addView(button("后台运行设置", v -> openBackgroundSettings()));
 
+        LinearLayout logTabs = new LinearLayout(this);
+        root.addView(logTabs);
+        logTabs.addView(button("服务端日志", v -> {
+            selectedLog = 0;
+            refreshLog();
+        }));
+        logTabs.addView(button("MongoDB 日志", v -> {
+            selectedLog = 1;
+            refreshLog();
+        }));
+
         ScrollView scroll = new ScrollView(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
@@ -99,6 +115,28 @@ public class MainActivity extends Activity {
         logView.setMovementMethod(new ScrollingMovementMethod());
         scroll.addView(logView);
         root.addView(scroll);
+
+        LinearLayout commandRow = new LinearLayout(this);
+        commandInput = new EditText(this);
+        commandInput.setSingleLine(true);
+        commandInput.setHint("输入服务端指令");
+        commandInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
+        commandInput.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEND) {
+                submitCommand();
+                return true;
+            }
+            return false;
+        });
+        commandInput.setLayoutParams(new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        commandRow.addView(commandInput);
+        Button sendCommand = new Button(this);
+        sendCommand.setText("发送");
+        sendCommand.setOnClickListener(v -> submitCommand());
+        commandRow.addView(sendCommand, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(commandRow);
 
         setContentView(root);
     }
@@ -152,6 +190,13 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void submitCommand() {
+        String command = commandInput.getText().toString().trim();
+        if (command.isEmpty()) return;
+        ServerService.sendCommand(this, command);
+        commandInput.setText("");
+    }
+
     private void refresh() {
         statusView.setText(ServerService.status);
 
@@ -175,8 +220,19 @@ public class MainActivity extends Activity {
                 ? (resSize / 1024 / 1024) + " MB (Resources.zip)" : "未导入");
         infoView.setText(info.toString());
 
-        String tail = Util.tail(new File(new File(files, "logs"), "server.log"), 25);
-        logView.setText(tail.isEmpty() ? "（暂无日志）" : tail);
+        refreshLog();
+    }
+
+    private void refreshLog() {
+        File log = selectedLog == 0
+                ? new File(new File(getFilesDir(), "logs"), "server.log")
+                : ServerService.mongoLogFile(this);
+        String tail = Util.tail(log, 200);
+        String text = tail.isEmpty() ? "（暂无日志记录）" : tail;
+        if (!text.equals(displayedLog)) {
+            displayedLog = text;
+            logView.setText(text);
+        }
     }
 
     @Override

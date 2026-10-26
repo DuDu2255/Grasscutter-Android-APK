@@ -154,7 +154,7 @@ public final class Util {
         StringBuilder sb = new StringBuilder();
         try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
             long len = raf.length();
-            long start = Math.max(0, len - 8192);
+            long start = Math.max(0, len - 65536);
             raf.seek(start);
             byte[] b = new byte[(int) (len - start)];
             raf.readFully(b);

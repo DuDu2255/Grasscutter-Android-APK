@@ -4,6 +4,8 @@
 
 ## 界面
 - **启动 / 停止**：拉起 proot 内的 MongoDB + 服务端（dispatch 10086 / 网关 22101）
+- **服务端日志 / MongoDB 日志**：分别查看保存在应用私有目录中的追加日志，重开应用后仍可查看
+- **指令输入**：在服务端运行时输入 Grasscutter 控制台命令并发送
 - **导入 JAR**：选一个 `grasscutter.jar`（自动替换内置版本）
 - **导入资源包**：选 resources 压缩包（zip），App 内解压到 `Android/data/com.dudu2255.astaps/files/resources`
 - **编辑 config.json**：内置编辑器，保存后重启服务生效
