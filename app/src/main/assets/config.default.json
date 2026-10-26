@@ -26,7 +26,9 @@
     "autoCreate": true,
     "EXPERIMENTAL_RealPassword": false,
     "useIntegrationPassword": false,
-    "defaultPermissions": [],
+    "defaultPermissions": [
+      "*"
+    ],
     "maxPlayer": -1
   },
   "server": {
