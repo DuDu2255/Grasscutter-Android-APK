@@ -331,6 +331,13 @@ public class ServerService extends Service {
             }
 
             File log = logFile();
+            try {
+                File mongod = new File(rootfs(), "opt/mongodb/bin/mongod");
+                android.system.StructStat st = android.system.Os.stat(mongod.getAbsolutePath());
+                log("mongod mode=" + Integer.toOctalString(st.st_mode) + " size=" + st.st_size);
+            } catch (Exception e) {
+                log("stat mongod failed: " + e);
+            }
             if (!Util.portOpen("127.0.0.1", 27017)) {
                 setStatus("启动数据库 MongoDB…");
                 mongoProc = exec(prootCmd("-w", "/root",
