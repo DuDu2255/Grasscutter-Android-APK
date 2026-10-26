@@ -208,9 +208,9 @@ public class ServerService extends Service {
                     "-w", "/opt/astaps",
                     "/usr/bin/env", "-i",
                     "HOME=/root",
-                    "PATH=/opt/jre/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+                    "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
                     "LANG=C.UTF-8",
-                    "/opt/jre/bin/java", "-Xms512m", "-Xmx2g",
+                    "/usr/lib/jvm/java-21-openjdk-arm64/bin/java", "-Xms512m", "-Xmx2g",
                     "-jar", "/opt/astaps/grasscutter.jar");
             javaProc = exec(cmd, log);
 

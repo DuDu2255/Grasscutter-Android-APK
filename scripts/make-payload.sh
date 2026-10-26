@@ -1,69 +1,48 @@
 #!/usr/bin/env bash
-# 构建 APK 内嵌 payload：ubuntu-base + 运行库 + JRE21 + MongoDB + grasscutter.jar
+# 构建 APK 内嵌 payload：ubuntu 24.04 (arm64) + JRE21 + libcurl + MongoDB + grasscutter.jar
+# 用 docker + binfmt 构建 arm64 rootfs（比 chroot+qemu 稳）
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$ROOT/build-payload
 ROOTFS=$WORK/rootfs
 rm -rf "$WORK"
-mkdir -p "$ROOTFS" "$ROOT/app/src/main/assets" "$WORK"
+mkdir -p "$WORK" "$ROOT/app/src/main/assets"
 
-fail() {
-  echo "::error::$*"
+fail() { echo "::error::$*"; exit 1; }
+
+echo "== enable arm64 binfmt =="
+docker run --privileged --rm tonistiigi/binfmt --install arm64 || fail "binfmt 安装失败"
+
+echo "== build arm64 rootfs =="
+CID=$(docker run -d --platform linux/arm64 ubuntu:24.04 sleep 3600) || fail "启动 arm64 容器失败"
+docker exec "$CID" bash -c "export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq --no-install-recommends openjdk-21-jre-headless libcurl4t64 libssl3t64 ca-certificates; apt-get clean; rm -rf /var/lib/apt/lists/*" || {
+  echo "::error::容器内 apt 安装失败"
+  docker rm -f "$CID" >/dev/null 2>&1 || true
   exit 1
 }
+docker export "$CID" -o "$WORK/rootfs.tar" || fail "docker export 失败"
+docker rm -f "$CID" >/dev/null 2>&1 || true
 
-in_rootfs() {
-  local log="$WORK/chroot.log"
-  if ! sudo chroot "$ROOTFS" /bin/bash -c "$1" >"$log" 2>&1; then
-    echo "::error::rootfs 步骤失败: $2"
-    tail -n 12 "$log" | while IFS= read -r line; do echo "::error::$line"; done
-    exit 1
-  fi
-}
-
-echo "== ubuntu base =="
-curl -L --retry 3 -o "$WORK/base.tgz" \
-  https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz || fail "下载 ubuntu-base 失败"
-sudo tar -xzf "$WORK/base.tgz" -C "$ROOTFS"
-
-echo "== install runtime libs (qemu) =="
-sudo cp /usr/bin/qemu-aarch64-static "$ROOTFS/usr/bin/" || fail "缺少 qemu-aarch64-static"
-sudo rm -f "$ROOTFS/etc/resolv.conf"
-echo "nameserver 1.1.1.1" | sudo tee "$ROOTFS/etc/resolv.conf" > /dev/null
-echo "nameserver 8.8.8.8" | sudo tee -a "$ROOTFS/etc/resolv.conf" > /dev/null
-for m in dev dev/pts proc sys; do
-  sudo mkdir -p "$ROOTFS/$m"
-  sudo mount --bind "/$m" "$ROOTFS/$m" || fail "挂载 /$m 失败"
-done
-in_rootfs "export DEBIAN_FRONTEND=noninteractive LANG=C; apt-get update -qq -o Acquire::Retries=3" "apt-get update"
-if ! in_rootfs "export DEBIAN_FRONTEND=noninteractive LANG=C; apt-get install -y -qq --no-install-recommends libcurl4t64 libssl3t64 ca-certificates" "安装 libcurl4t64"; then
-  fail "依赖安装失败"
-fi
-for m in dev/pts dev proc sys; do sudo umount -l "$ROOTFS/$m" || true; done
-sudo rm -f "$ROOTFS/usr/bin/qemu-aarch64-static"
-sudo rm -rf "$ROOTFS"/var/lib/apt/lists/* "$ROOTFS"/var/cache/apt/archives/*.deb
-
-echo "== JRE 21 =="
-curl -L --retry 3 -o "$WORK/jre.tgz" \
-  "https://api.adoptium.net/v3/binary/latest/21/ga/linux/aarch64/jre/hotspot/normal/eclipse" || fail "下载 JRE 失败"
-sudo mkdir -p "$ROOTFS/opt/jre"
-sudo tar -xzf "$WORK/jre.tgz" -C "$ROOTFS/opt/jre" --strip-components=1
-test -x "$ROOTFS/opt/jre/bin/java" || fail "JRE 解压异常：缺 bin/java"
+mkdir -p "$ROOTFS"
+tar -xf "$WORK/rootfs.tar" -C "$ROOTFS"
+test -x "$ROOTFS/usr/lib/jvm/java-21-openjdk-arm64/bin/java" || fail "rootfs 内没有 java"
+"$ROOTFS/usr/lib/jvm/java-21-openjdk-arm64/bin/java" -version 2>/dev/null || true
 
 echo "== MongoDB 7.0 =="
 curl -L --retry 3 -o "$WORK/mongo.tgz" \
   https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-ubuntu2204-7.0.14.tgz || fail "下载 MongoDB 失败"
-sudo mkdir -p "$ROOTFS/opt/mongodb"
-sudo tar -xzf "$WORK/mongo.tgz" -C "$ROOTFS/opt/mongodb" --strip-components=1
-test -x "$ROOTFS/opt/mongodb/bin/mongod" || fail "MongoDB 解压异常：缺 bin/mongod"
+mkdir -p "$ROOTFS/opt/mongodb"
+tar -xzf "$WORK/mongo.tgz" -C "$ROOTFS/opt/mongodb" --strip-components=1
+test -x "$ROOTFS/opt/mongodb/bin/mongod" || fail "MongoDB 解压异常"
 
 echo "== grasscutter.jar =="
-sudo mkdir -p "$ROOTFS/opt/astaps/data/db" "$ROOTFS/opt/astaps/resources" "$ROOTFS/opt/astaps/logs"
+mkdir -p "$ROOTFS/opt/astaps/data/db" "$ROOTFS/opt/astaps/resources" "$ROOTFS/opt/astaps/logs"
 curl -L --retry 3 -o "$WORK/grasscutter.jar" \
   https://github.com/MeChen618/AstaPS/releases/latest/download/grasscutter.jar || fail "下载 grasscutter.jar 失败"
 test -s "$WORK/grasscutter.jar" || fail "grasscutter.jar 为空"
-sudo cp "$WORK/grasscutter.jar" "$ROOTFS/opt/astaps/grasscutter.jar"
-sudo cp "$ROOT/app/config.json" "$ROOTFS/opt/astaps/config.json"
+cp "$WORK/grasscutter.jar" "$ROOTFS/opt/astaps/grasscutter.jar"
+cp "$ROOT/app/config.json" "$ROOTFS/opt/astaps/config.json"
+printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$ROOTFS/etc/resolv.conf"
 
 echo "== payload =="
 PAYLOAD=$WORK/payload
@@ -71,6 +50,6 @@ mkdir -p "$PAYLOAD"
 cp "$ROOT/payload/proot" "$PAYLOAD/proot"
 cp "$ROOT/payload/libtalloc.so.2" "$PAYLOAD/libtalloc.so.2"
 chmod 755 "$PAYLOAD/proot"
-sudo cp -a "$ROOTFS" "$PAYLOAD/rootfs"
-sudo tar -czf "$ROOT/app/src/main/assets/payload.tar.gz" -C "$PAYLOAD" .
+cp -a "$ROOTFS" "$PAYLOAD/rootfs"
+tar -czf "$ROOT/app/src/main/assets/payload.tar.gz" -C "$PAYLOAD" .
 ls -lh "$ROOT/app/src/main/assets/payload.tar.gz"
