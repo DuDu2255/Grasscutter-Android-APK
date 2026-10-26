@@ -30,12 +30,15 @@ echo "== install runtime libs (qemu) =="
 sudo cp /usr/bin/qemu-aarch64-static "$ROOTFS/usr/bin/" || fail "缺少 qemu-aarch64-static"
 sudo rm -f "$ROOTFS/etc/resolv.conf"
 sudo cp /etc/resolv.conf "$ROOTFS/etc/resolv.conf"
-sudo mount -t proc proc "$ROOTFS/proc" || true
+for m in dev dev/pts proc sys; do
+  sudo mkdir -p "$ROOTFS/$m"
+  sudo mount --bind "/$m" "$ROOTFS/$m" || fail "挂载 /$m 失败"
+done
 in_rootfs "export DEBIAN_FRONTEND=noninteractive LANG=C; apt-get update -qq -o Acquire::Retries=3" "apt-get update"
 if ! in_rootfs "export DEBIAN_FRONTEND=noninteractive LANG=C; apt-get install -y -qq --no-install-recommends libcurl4t64 libssl3t64 ca-certificates" "安装 libcurl4t64"; then
   fail "依赖安装失败"
 fi
-sudo umount "$ROOTFS/proc" || true
+for m in dev/pts dev proc sys; do sudo umount -l "$ROOTFS/$m" || true; done
 sudo rm -f "$ROOTFS/usr/bin/qemu-aarch64-static"
 sudo rm -rf "$ROOTFS"/var/lib/apt/lists/* "$ROOTFS"/var/cache/apt/archives/*.deb
 
