@@ -48,6 +48,7 @@ PAYLOAD=$WORK/payload
 mkdir -p "$PAYLOAD"
 cp "$ROOT/payload/proot" "$PAYLOAD/proot"
 cp "$ROOT/payload/libtalloc.so.2" "$PAYLOAD/libtalloc.so.2"
+cp "$ROOT/payload/libandroid-shmem.so" "$PAYLOAD/libandroid-shmem.so"
 chmod 755 "$PAYLOAD/proot"
 cp -a "$ROOTFS" "$PAYLOAD/rootfs"
 tar -czf "$ROOT/app/src/main/assets/payload.tar.gz" -C "$PAYLOAD" .

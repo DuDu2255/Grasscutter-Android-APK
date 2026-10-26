@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -26,6 +27,7 @@ public class ServerService extends Service {
     public static final String ACTION_IMPORT_JAR = "com.dudu2255.astaps.IMPORT_JAR";
     public static final String ACTION_IMPORT_RES = "com.dudu2255.astaps.IMPORT_RES";
     public static final String EXTRA_URI = "uri";
+
     public static final String PAYLOAD_URL =
             "https://github.com/DuDu2255/Grasscutter-Android-APK/releases/latest/download/payload.tar.gz";
 
@@ -147,44 +149,17 @@ public class ServerService extends Service {
         return new File(files(), "import/grasscutter.jar");
     }
 
-    private File resourcesDir() {
-        return new File(getExternalFilesDir(null), "resources");
-    }
-
     private File logFile() {
         File d = new File(files(), "logs");
         d.mkdirs();
         return new File(d, "server.log");
     }
 
-    /** 用户可编辑的主配置：files/config.json */
     public static File masterConfig(Context c) {
         return new File(c.getFilesDir(), "config.json");
     }
 
-    private void ensureConfig() throws IOException {
-        File master = masterConfig(this);
-        if (!master.exists()) {
-            try (InputStream in = getAssets().open("config.default.json")) {
-                Util.copy(in, master);
-            }
-        }
-        File target = new File(serverDir(), "config.json");
-        if (target.getParentFile() != null && target.getParentFile().exists()) {
-            try (InputStream in = new FileInputStream(master)) {
-                Util.copy(in, target);
-            }
-        }
-    }
-
-    private void applyImportedJar() throws IOException {
-        File src = importedJar();
-        File dst = jarFile();
-        if (!src.exists() || !serverDir().exists()) return;
-        try (InputStream in = new FileInputStream(src)) {
-            Util.copy(in, dst);
-        }
-    }
+    // ---------- 导入 ----------
 
     private void doImportJar(Uri uri) {
         try {
@@ -201,7 +176,8 @@ public class ServerService extends Service {
             applyImportedJar();
             setStatus("jar 已导入（" + (dst.length() / 1024 / 1024) + " MB）");
         } catch (Exception e) {
-            setStatus("导入 jar 失败：" + e.getMessage());
+            log("导入 jar 失败: " + e);
+            setStatus("导入 jar 失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
         }
     }
 
@@ -212,24 +188,92 @@ public class ServerService extends Service {
                 return;
             }
             setStatus("复制资源包…");
-            File zip = new File(files(), "resources.zip");
+            File tmp = new File(files(), "Resources.zip.tmp");
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 if (in == null) throw new IOException("无法读取文件");
-                Util.copy(in, zip);
+                Util.copy(in, tmp);
             }
-            setStatus("资源包已导入 " + (zip.length() / 1024 / 1024) + " MB，点启动自动解压");
+            File src = new File(files(), "Resources.zip");
+            if (src.exists()) src.delete();
+            if (!tmp.renameTo(src)) throw new IOException("保存失败");
+
+            File dst = new File(serverDir(), "Resources.zip");
+            if (dst.exists()) dst.delete();
+            if (serverDir().exists() && !src.renameTo(dst)) {
+                try (InputStream in = new FileInputStream(src)) {
+                    Util.copy(in, dst);
+                }
+            }
+            long size = dst.exists() ? dst.length() : src.length();
+            setStatus("资源包已就绪 " + (size / 1024 / 1024) + " MB（不解压，直接用 zip）");
         } catch (Exception e) {
             log("导入资源包失败: " + e);
             setStatus("导入资源失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
         }
     }
 
+    private void applyImportedJar() throws IOException {
+        File src = importedJar();
+        if (!src.exists() || !serverDir().exists()) return;
+        try (InputStream in = new FileInputStream(src)) {
+            Util.copy(in, jarFile());
+        }
+    }
+
+    // ---------- 配置 ----------
+
+    private void ensureConfig() throws IOException {
+        File master = masterConfig(this);
+        if (!master.exists()) {
+            try (InputStream in = getAssets().open("config.default.json")) {
+                Util.copy(in, master);
+            }
+        }
+        if (!serverDir().exists()) return;
+
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (InputStream in = new FileInputStream(master)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+        }
+        String json = new String(bos.toByteArray(), "UTF-8")
+                .replace("\"./resources/\"", "\"./Resources.zip\"");
+        try (FileOutputStream os = new FileOutputStream(new File(serverDir(), "config.json"))) {
+            os.write(json.getBytes("UTF-8"));
+        }
+    }
+
+    // ---------- 资源包 ----------
+
+    /** 服务端原生支持把 resources 指到 zip，所以资源包保持压缩包形态，不解压 */
+    private boolean ensureResources() {
+        File src = new File(files(), "Resources.zip");
+        File dst = new File(serverDir(), "Resources.zip");
+        if (!dst.exists() && src.exists() && serverDir().exists()) {
+            if (!src.renameTo(dst)) {
+                try (InputStream in = new FileInputStream(src)) {
+                    Util.copy(in, dst);
+                } catch (Exception e) {
+                    log("放置 Resources.zip 失败: " + e);
+                }
+            }
+        }
+        long size = dst.exists() ? dst.length() : (src.exists() ? src.length() : 0);
+        if (size < 100L * 1024 * 1024) {
+            setStatus("还没有资源包 Resources.zip，先点「导入资源包」");
+            return false;
+        }
+        return true;
+    }
+
+    // ---------- 运行 ----------
+
     private List<String> prootCmd(String... rest) {
-        File files = files();
-        File tmp = new File(files, "tmp");
+        File tmp = new File(files(), "tmp");
         tmp.mkdirs();
         List<String> c = new ArrayList<>();
-        c.add(new File(files, "proot").getAbsolutePath());
+        c.add(new File(files(), "proot").getAbsolutePath());
         c.add("--kill-on-exit");
         c.add("--link2symlink");
         c.add("-0");
@@ -277,10 +321,8 @@ public class ServerService extends Service {
                 running = false;
                 return;
             }
-            File res = resourcesDir();
 
             File log = logFile();
-
             if (!Util.portOpen("127.0.0.1", 27017)) {
                 setStatus("启动数据库 MongoDB…");
                 mongoProc = exec(prootCmd("-w", "/root",
@@ -292,7 +334,7 @@ public class ServerService extends Service {
                     Thread.sleep(1000);
                 }
                 if (!Util.portOpen("127.0.0.1", 27017)) {
-                    setStatus("MongoDB 启动失败，请查看日志");
+                    setStatus("MongoDB 启动失败，请看日志");
                     running = false;
                     return;
                 }
@@ -300,7 +342,6 @@ public class ServerService extends Service {
 
             setStatus("启动游戏服务端…");
             List<String> cmd = prootCmd(
-                    "-b", res.getAbsolutePath() + ":/opt/astaps/resources",
                     "-w", "/opt/astaps",
                     "/usr/bin/env", "-i",
                     "HOME=/root",
@@ -323,7 +364,8 @@ public class ServerService extends Service {
             int code = javaProc.waitFor();
             setStatus("服务端已退出 (code " + code + ")，点启动重试");
         } catch (Exception e) {
-            setStatus("启动出错：" + e.getMessage());
+            log("启动失败: " + e);
+            setStatus("启动出错：" + e.getClass().getSimpleName() + " " + e.getMessage());
         } finally {
             running = false;
         }
@@ -334,12 +376,11 @@ public class ServerService extends Service {
         try {
             long free = files().getUsableSpace();
             if (free < 2L * 1024 * 1024 * 1024) {
-                setStatus("存储空间不足：运行环境需要约 2 GB（当前可用 " + (free / 1024 / 1024) + " MB）");
+                setStatus("存储空间不足：运行环境需要约 2 GB（可用 " + (free / 1024 / 1024) + " MB）");
                 return false;
             }
-
-            setStatus("首次运行：准备运行环境…");
             if (!tar.exists() || tar.length() < 100L * 1024 * 1024) {
+                setStatus("首次运行：准备运行环境…");
                 boolean ok = false;
                 try {
                     copyAsset(findPayloadAsset(), tar);
@@ -348,11 +389,10 @@ public class ServerService extends Service {
                     log("内置 payload 读取失败: " + e);
                 }
                 if (!ok) {
-                    setStatus("内置运行环境缺失，正在联网下载（约 600 MB）…");
+                    setStatus("内置运行环境缺失，联网下载中（约 250 MB）…");
                     download(PAYLOAD_URL, tar);
                 }
             }
-
             setStatus("解压运行环境…");
             Util.untarGz(tar, files(), this::setStatus);
             try {
@@ -360,7 +400,7 @@ public class ServerService extends Service {
             } catch (Exception ignored) {
             }
             if (!new File(rootfs(), "usr/lib/jvm").exists()) {
-                setStatus("解压后缺少 java，运行环境包不完整");
+                setStatus("运行环境包不完整（缺 java）");
                 return false;
             }
             tar.delete();
@@ -374,7 +414,7 @@ public class ServerService extends Service {
         }
     }
 
-    /** aapt 打包时可能改写扩展名（payload.tar.gz -> payload.tar），这里按前缀查找 */
+    /** aapt 打包可能改写扩展名，按前缀查找 */
     private String findPayloadAsset() throws IOException {
         String[] list = getAssets().list("");
         if (list != null) {
@@ -382,7 +422,7 @@ public class ServerService extends Service {
                 if (n.startsWith("payload")) return n;
             }
         }
-        return "payload.tar.gz";
+        return "payload.bin";
     }
 
     private void copyAsset(String name, File dst) throws IOException {
@@ -422,30 +462,6 @@ public class ServerService extends Service {
             os.write((msg + "\n").getBytes("UTF-8"));
             os.close();
         } catch (Exception ignored) {
-        }
-    }
-
-    /** 启动前把 resources.zip 解压成目录（导入资源包只负责把 zip 放好） */
-    private boolean ensureResources() {
-        File res = resourcesDir();
-        if (res.isDirectory() && Util.dirCount(res) > 0) return true;
-
-        File zip = new File(files(), "resources.zip");
-        if (!zip.exists()) {
-            setStatus("还没有资源包，先点「导入资源包」");
-            return false;
-        }
-        try {
-            setStatus("解压资源包…");
-            try (InputStream in = new java.io.FileInputStream(zip)) {
-                Util.unzip(in, res, this::setStatus);
-            }
-            setStatus("资源包解压完成（" + Util.dirCount(res) + " 项）");
-            return true;
-        } catch (Exception e) {
-            log("解压资源包失败: " + e);
-            setStatus("资源包解压失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
-            return false;
         }
     }
 

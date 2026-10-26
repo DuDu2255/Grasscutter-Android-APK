@@ -1,6 +1,6 @@
 {
   "folderStructure": {
-    "resources": "./resources/",
+    "resources": "./Resources.zip",
     "data": "./data/",
     "packets": "./packets/",
     "scripts": "resources:Scripts/",

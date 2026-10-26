@@ -127,7 +127,7 @@ public class MainActivity extends Activity {
             toast("正在导入 jar…");
         } else if (requestCode == REQ_RES) {
             ServerService.importResources(this, uri);
-            toast("正在导入资源包（较大，请等待）");
+            toast("正在复制资源包（不解压）");
         }
     }
 
@@ -142,7 +142,9 @@ public class MainActivity extends Activity {
         File jar = new File(files, "rootfs/opt/astaps/grasscutter.jar");
         File imported = new File(files, "import/grasscutter.jar");
         File config = ServerService.masterConfig(this);
-        File res = new File(getExternalFilesDir(null), "resources");
+        File resZip = new File(files, "Resources.zip");
+        File resZip2 = new File(files, "rootfs/opt/astaps/Resources.zip");
+        long resSize = resZip.exists() ? resZip.length() : (resZip2.exists() ? resZip2.length() : 0);
 
         StringBuilder info = new StringBuilder();
         info.append("jar: ").append(jar.exists()
@@ -151,7 +153,8 @@ public class MainActivity extends Activity {
             info.append("（已导入 ").append(imported.length() / 1024 / 1024).append(" MB）");
         }
         info.append("\n配置: ").append(config.exists() ? "可编辑" : "默认");
-        info.append("\n资源: ").append(Util.dirCount(res)).append(" 项");
+        info.append("\n资源包: ").append(resSize > 0
+                ? (resSize / 1024 / 1024) + " MB (Resources.zip)" : "未导入");
         infoView.setText(info.toString());
 
         String tail = Util.tail(new File(new File(files, "logs"), "server.log"), 25);
