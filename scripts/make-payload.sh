@@ -51,4 +51,6 @@ cp "$ROOT/payload/libtalloc.so.2" "$PAYLOAD/libtalloc.so.2"
 chmod 755 "$PAYLOAD/proot"
 cp -a "$ROOTFS" "$PAYLOAD/rootfs"
 tar -czf "$ROOT/app/src/main/assets/payload.tar.gz" -C "$PAYLOAD" .
-ls -lh "$ROOT/app/src/main/assets/payload.tar.gz"
+cp "$ROOT/app/src/main/assets/payload.tar.gz" "$ROOT/app/src/main/assets/payload.bin"
+rm -f "$ROOT/app/src/main/assets/payload.tar.gz"
+ls -lh "$ROOT/app/src/main/assets/payload.bin"

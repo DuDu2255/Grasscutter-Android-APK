@@ -41,7 +41,8 @@ jobs:
       - name: Collect APK
         run: |
           cp app/build/outputs/apk/release/app-release.apk "AstaPS-build${GITHUB_RUN_NUMBER}.apk"
-          ls -lh AstaPS-*.apk
+          cp app/src/main/assets/payload.bin payload.tar.gz
+          ls -lh AstaPS-*.apk payload.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
@@ -56,7 +57,7 @@ jobs:
           body: "自动构建的 AstaPS 安卓服务端 APK"
           files: |
             AstaPS-*.apk
-            app/src/main/assets/payload.tar.gz
+            app/src/main/assets/payload.bin
 
       - name: Publish failure log
         if: failure()

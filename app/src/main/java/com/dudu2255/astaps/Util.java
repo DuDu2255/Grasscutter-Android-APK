@@ -32,13 +32,25 @@ public final class Util {
         }
     }
 
-    /** 解压 tar.gz（支持符号链接 / 硬链接 / GNU 长文件名 / 权限位） */
+    /** 解压 tar / tar.gz（根据头字节自动判断，支持符号链接 / 硬链接 / GNU 长文件名 / 权限位） */
     public static void untarGz(File src, File dest, Progress cb) throws IOException {
-        long total = Math.max(1, src.length());
+        try (InputStream raw = new BufferedInputStream(new FileInputStream(src), 1 << 16)) {
+            raw.mark(4);
+            int b0 = raw.read();
+            int b1 = raw.read();
+            raw.reset();
+            InputStream in = (b0 == 0x1f && b1 == 0x8b)
+                    ? new GZIPInputStream(raw, 1 << 16)
+                    : raw;
+            untarStream(in, Math.max(1, src.length()), dest, cb);
+        }
+    }
+
+    private static void untarStream(InputStream in, long total, File dest, Progress cb) throws IOException {
         long done = 0;
         long last = 0;
         byte[] hdr = new byte[512];
-        try (InputStream in = new GZIPInputStream(new BufferedInputStream(new FileInputStream(src), 1 << 16), 1 << 16)) {
+        {
             String longName = null;
             while (true) {
                 if (readFully(in, hdr) < 512) break;
@@ -103,7 +115,7 @@ public final class Util {
                 long now = System.currentTimeMillis();
                 if (cb != null && now - last > 400) {
                     last = now;
-                    cb.onProgress("解压运行环境 " + (done * 100 / total) + "%");
+                    cb.onProgress("解压运行环境 " + Math.min(99, done * 100 / total) + "%");
                 }
             }
         }

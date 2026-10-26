@@ -18,7 +18,7 @@ android {
     }
 
     aaptOptions {
-        noCompress 'gz', 'jar', 'tar', 'tgz', 'xz'
+        noCompress 'bin', 'jar', 'tar', 'tgz', 'xz'
     }
 
     signingConfigs {
