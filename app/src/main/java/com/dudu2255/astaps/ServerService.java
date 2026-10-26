@@ -314,6 +314,14 @@ public class ServerService extends Service {
                     return;
                 }
             }
+            if (!new File(files(), ".perms-ok").exists()) {
+                setStatus("修复文件权限…");
+                fixPerms(rootfs());
+                try {
+                    new File(files(), ".perms-ok").createNewFile();
+                } catch (Exception ignored) {
+                }
+            }
             ensureConfig();
             applyImportedJar();
 
@@ -453,6 +461,39 @@ public class ServerService extends Service {
             }
         } finally {
             c.disconnect();
+        }
+    }
+
+    /** Android 上解压后要确保可执行位；ELF 和 bin 目录给 0755 */
+    private void fixPerms(File f) {
+        try {
+            if (f.isDirectory()) {
+                chmod(f, 0755);
+                File[] kids = f.listFiles();
+                if (kids != null) for (File c : kids) fixPerms(c);
+                return;
+            }
+            if (!f.isFile()) return;
+            boolean exec = f.getPath().contains("/bin/") || isElf(f);
+            chmod(f, exec ? 0755 : 0644);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private boolean isElf(File f) {
+        try (InputStream in = new FileInputStream(f)) {
+            byte[] b = new byte[4];
+            if (in.read(b) < 4) return false;
+            return b[0] == 0x7f && b[1] == 'E' && b[2] == 'L' && b[3] == 'F';
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void chmod(File f, int mode) {
+        try {
+            android.system.Os.chmod(f.getAbsolutePath(), mode);
+        } catch (Exception ignored) {
         }
     }
 
