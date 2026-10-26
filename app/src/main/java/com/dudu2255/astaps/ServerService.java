@@ -6,17 +6,16 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
-import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,11 +23,9 @@ public class ServerService extends Service {
 
     public static final String ACTION_START = "com.dudu2255.astaps.START";
     public static final String ACTION_STOP = "com.dudu2255.astaps.STOP";
-    public static final String ACTION_UNZIP = "com.dudu2255.astaps.UNZIP";
-
-    public static final String RES_ZIP_URL =
-            "https://codeload.github.com/MeChen618/AstaPS-Resource/zip/refs/heads/main";
-    public static final String RES_ZIP_TOP = "AstaPS-Resource-main/";
+    public static final String ACTION_IMPORT_JAR = "com.dudu2255.astaps.IMPORT_JAR";
+    public static final String ACTION_IMPORT_RES = "com.dudu2255.astaps.IMPORT_RES";
+    public static final String EXTRA_URI = "uri";
 
     private static final String CHANNEL = "astaps";
     private static final int NOTIF_ID = 1;
@@ -42,17 +39,24 @@ public class ServerService extends Service {
     private Thread worker;
 
     public static void start(Context c) {
-        Intent i = new Intent(c, ServerService.class).setAction(ACTION_START);
-        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
-        else c.startService(i);
+        send(c, new Intent(c, ServerService.class).setAction(ACTION_START));
     }
 
     public static void stop(Context c) {
-        c.startService(new Intent(c, ServerService.class).setAction(ACTION_STOP));
+        send(c, new Intent(c, ServerService.class).setAction(ACTION_STOP));
     }
 
-    public static void unzip(Context c) {
-        c.startService(new Intent(c, ServerService.class).setAction(ACTION_UNZIP));
+    public static void importJar(Context c, Uri uri) {
+        send(c, new Intent(c, ServerService.class).setAction(ACTION_IMPORT_JAR).putExtra(EXTRA_URI, uri));
+    }
+
+    public static void importResources(Context c, Uri uri) {
+        send(c, new Intent(c, ServerService.class).setAction(ACTION_IMPORT_RES).putExtra(EXTRA_URI, uri));
+    }
+
+    private static void send(Context c, Intent i) {
+        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
+        else c.startService(i);
     }
 
     @Override
@@ -104,8 +108,14 @@ public class ServerService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (ACTION_UNZIP.equals(action)) {
-            new Thread(this::unzipResources, "astaps-unzip").start();
+        if (ACTION_IMPORT_JAR.equals(action)) {
+            final Uri uri = intent.getParcelableExtra(EXTRA_URI);
+            new Thread(() -> doImportJar(uri), "astaps-jar").start();
+            return START_STICKY;
+        }
+        if (ACTION_IMPORT_RES.equals(action)) {
+            final Uri uri = intent.getParcelableExtra(EXTRA_URI);
+            new Thread(() -> doImportResources(uri), "astaps-res").start();
             return START_STICKY;
         }
         if (worker == null || !worker.isAlive()) {
@@ -119,15 +129,100 @@ public class ServerService extends Service {
         return getFilesDir();
     }
 
+    private File rootfs() {
+        return new File(files(), "rootfs");
+    }
+
+    private File serverDir() {
+        return new File(rootfs(), "opt/astaps");
+    }
+
+    private File jarFile() {
+        return new File(serverDir(), "grasscutter.jar");
+    }
+
+    private File importedJar() {
+        return new File(files(), "import/grasscutter.jar");
+    }
+
+    private File resourcesDir() {
+        return new File(getExternalFilesDir(null), "resources");
+    }
+
     private File logFile() {
         File d = new File(files(), "logs");
         d.mkdirs();
         return new File(d, "server.log");
     }
 
+    /** 用户可编辑的主配置：files/config.json */
+    public static File masterConfig(Context c) {
+        return new File(c.getFilesDir(), "config.json");
+    }
+
+    private void ensureConfig() throws IOException {
+        File master = masterConfig(this);
+        if (!master.exists()) {
+            try (InputStream in = getAssets().open("config.default.json")) {
+                Util.copy(in, master);
+            }
+        }
+        File target = new File(serverDir(), "config.json");
+        if (target.getParentFile() != null && target.getParentFile().exists()) {
+            try (InputStream in = new FileInputStream(master)) {
+                Util.copy(in, target);
+            }
+        }
+    }
+
+    private void applyImportedJar() throws IOException {
+        File src = importedJar();
+        File dst = jarFile();
+        if (!src.exists() || !serverDir().exists()) return;
+        try (InputStream in = new FileInputStream(src)) {
+            Util.copy(in, dst);
+        }
+    }
+
+    private void doImportJar(Uri uri) {
+        try {
+            if (uri == null) {
+                setStatus("没有选择文件");
+                return;
+            }
+            setStatus("导入 jar…");
+            File dst = importedJar();
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new IOException("无法读取文件");
+                Util.copy(in, dst);
+            }
+            applyImportedJar();
+            setStatus("jar 已导入（" + (dst.length() / 1024 / 1024) + " MB）");
+        } catch (Exception e) {
+            setStatus("导入 jar 失败：" + e.getMessage());
+        }
+    }
+
+    private void doImportResources(Uri uri) {
+        try {
+            if (uri == null) {
+                setStatus("没有选择文件");
+                return;
+            }
+            File out = resourcesDir();
+            setStatus("解压资源包…");
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new IOException("无法读取文件");
+                Util.unzip(in, out, msg -> setStatus(msg));
+            }
+            setStatus("资源包已导入（" + Util.dirCount(out) + " 项）");
+        } catch (Exception e) {
+            setStatus("导入资源失败：" + e.getMessage());
+        }
+    }
+
     private List<String> prootCmd(String... rest) {
         File files = files();
-        File rootfs = new File(files, "rootfs");
         File tmp = new File(files, "tmp");
         tmp.mkdirs();
         List<String> c = new ArrayList<>();
@@ -136,7 +231,7 @@ public class ServerService extends Service {
         c.add("--link2symlink");
         c.add("-0");
         c.add("-r");
-        c.add(rootfs.getAbsolutePath());
+        c.add(rootfs().getAbsolutePath());
         c.add("-b");
         c.add("/dev");
         c.add("-b");
@@ -153,11 +248,11 @@ public class ServerService extends Service {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
         pb.environment().clear();
+        pb.environment().put("LD_PRELOAD", "");
         pb.environment().put("LD_LIBRARY_PATH", files().getAbsolutePath());
         pb.environment().put("PROOT_TMP_DIR", new File(files(), "tmp").getAbsolutePath());
         pb.environment().put("HOME", files().getAbsolutePath());
         pb.environment().put("TMPDIR", new File(files(), "tmp").getAbsolutePath());
-        final OutputStream os = new FileOutputStream(out, true);
         pb.redirectOutput(ProcessBuilder.Redirect.appendTo(out));
         return pb.start();
     }
@@ -166,19 +261,18 @@ public class ServerService extends Service {
         if (running) return;
         running = true;
         try {
-            File files = files();
-            File rootfs = new File(files, "rootfs");
-            File serverDir = new File(rootfs, "opt/astaps");
-            File res = new File(getExternalFilesDir(null), "resources");
-
-            if (!new File(serverDir, "grasscutter.jar").exists()) {
+            if (!new File(rootfs(), "usr").exists()) {
                 if (!installPayload()) {
                     running = false;
                     return;
                 }
             }
-            if (!res.isDirectory() || res.list() == null || res.list().length == 0) {
-                setStatus("缺少资源包，请先下载并解压资源");
+            ensureConfig();
+            applyImportedJar();
+
+            File res = resourcesDir();
+            if (!res.isDirectory() || Util.dirCount(res) == 0) {
+                setStatus("还没有资源包，先点「导入资源包」");
                 running = false;
                 return;
             }
@@ -239,7 +333,7 @@ public class ServerService extends Service {
             File tar = new File(files(), "payload.tar.gz");
             if (!tar.exists()) {
                 try (InputStream in = getAssets().open("payload.tar.gz");
-                     OutputStream os = new FileOutputStream(tar)) {
+                     FileOutputStream os = new FileOutputStream(tar)) {
                     byte[] buf = new byte[1 << 16];
                     int n;
                     while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
@@ -256,22 +350,6 @@ public class ServerService extends Service {
         } catch (Exception e) {
             setStatus("解压失败：" + e.getMessage());
             return false;
-        }
-    }
-
-    private void unzipResources() {
-        try {
-            File zip = new File(getExternalFilesDir(null), "resources.zip");
-            File out = new File(getExternalFilesDir(null), "resources");
-            if (!Util.zipExists(zip)) {
-                setStatus("没有找到下载好的 resources.zip");
-                return;
-            }
-            setStatus("解压资源包…");
-            Util.unzip(zip, out, RES_ZIP_TOP, this::setStatus);
-            setStatus("资源解压完成");
-        } catch (Exception e) {
-            setStatus("资源解压失败：" + e.getMessage());
         }
     }
 

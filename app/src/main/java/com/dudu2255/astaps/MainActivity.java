@@ -1,15 +1,14 @@
 package com.dudu2255.astaps;
 
 import android.app.Activity;
-import android.app.DownloadManager;
-import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.method.ScrollingMovementMethod;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -21,7 +20,11 @@ import java.io.File;
 
 public class MainActivity extends Activity {
 
+    private static final int REQ_JAR = 1001;
+    private static final int REQ_RES = 1002;
+
     private TextView statusView;
+    private TextView infoView;
     private TextView logView;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -48,30 +51,44 @@ public class MainActivity extends Activity {
 
         statusView = new TextView(this);
         statusView.setTextSize(16);
-        statusView.setPadding(0, 28, 0, 28);
+        statusView.setPadding(0, 24, 0, 8);
         statusView.setTextColor(Color.parseColor("#1565C0"));
         root.addView(statusView);
 
+        infoView = new TextView(this);
+        infoView.setTextSize(12);
+        infoView.setPadding(0, 0, 0, 16);
+        root.addView(infoView);
+
         LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(row1);
-        row1.addView(button("启动", v -> startServer()));
-        row1.addView(button("停止", v -> stopServer()));
+        row1.addView(button("启动", v -> {
+            ServerService.start(this);
+            toast("正在启动…");
+        }));
+        row1.addView(button("停止", v -> {
+            ServerService.stop(this);
+            toast("已停止");
+        }));
 
         LinearLayout row2 = new LinearLayout(this);
-        row2.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(row2);
-        row2.addView(button("下载资源", v -> downloadResources()));
-        row2.addView(button("解压资源", v -> ServerService.unzip(this)));
+        row2.addView(button("导入 JAR", v -> pick(REQ_JAR)));
+        row2.addView(button("导入资源包", v -> pick(REQ_RES)));
+
+        LinearLayout row3 = new LinearLayout(this);
+        root.addView(row3);
+        row3.addView(button("编辑 config.json", v ->
+                startActivity(new Intent(this, ConfigActivity.class))));
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        lp.topMargin = 24;
+        lp.topMargin = 20;
         scroll.setLayoutParams(lp);
         logView = new TextView(this);
         logView.setTextSize(11);
-        logView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        logView.setTypeface(Typeface.MONOSPACE);
         logView.setTextIsSelectable(true);
         logView.setMovementMethod(new ScrollingMovementMethod());
         scroll.addView(logView);
@@ -84,33 +101,33 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(text);
         b.setOnClickListener(l);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        b.setLayoutParams(lp);
+        b.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         return b;
     }
 
-    private void startServer() {
-        ServerService.start(this);
-        toast("正在启动…");
-    }
-
-    private void stopServer() {
-        ServerService.stop(this);
-        toast("已停止");
-    }
-
-    private void downloadResources() {
+    private void pick(int req) {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
         try {
-            DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(ServerService.RES_ZIP_URL));
-            req.setTitle("AstaPS 资源包");
-            req.setDescription("约 1.5 GB，下载完成后点“解压资源”");
-            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            req.setDestinationInExternalFilesDir(this, null, "resources.zip");
-            dm.enqueue(req);
-            toast("已加入下载，完成后点“解压资源”");
+            startActivityForResult(i, req);
         } catch (Exception e) {
-            toast("下载失败：" + e.getMessage());
+            toast("没有文件管理器：" + e.getMessage());
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null) return;
+        Uri uri = data.getData();
+        if (uri == null) return;
+        if (requestCode == REQ_JAR) {
+            ServerService.importJar(this, uri);
+            toast("正在导入 jar…");
+        } else if (requestCode == REQ_RES) {
+            ServerService.importResources(this, uri);
+            toast("正在导入资源包（较大，请等待）");
         }
     }
 
@@ -120,15 +137,25 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         statusView.setText(ServerService.status);
-        File log = new File(new File(getFilesDir(), "logs"), "server.log");
-        String tail = Util.tail(log, 25);
-        DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-        File zip = new File(getExternalFilesDir(null), "resources.zip");
-        String extra = "";
-        if (zip.exists()) {
-            extra = "\n[资源包] " + (zip.length() / (1024 * 1024)) + " MB 已下载";
+
+        File files = getFilesDir();
+        File jar = new File(files, "rootfs/opt/astaps/grasscutter.jar");
+        File imported = new File(files, "import/grasscutter.jar");
+        File config = ServerService.masterConfig(this);
+        File res = new File(getExternalFilesDir(null), "resources");
+
+        StringBuilder info = new StringBuilder();
+        info.append("jar: ").append(jar.exists()
+                ? (jar.length() / 1024 / 1024) + " MB" : "未就绪");
+        if (imported.exists()) {
+            info.append("（已导入 ").append(imported.length() / 1024 / 1024).append(" MB）");
         }
-        logView.setText(tail.isEmpty() ? "（暂无日志）" + extra : tail + extra);
+        info.append("\n配置: ").append(config.exists() ? "可编辑" : "默认");
+        info.append("\n资源: ").append(Util.dirCount(res)).append(" 项");
+        infoView.setText(info.toString());
+
+        String tail = Util.tail(new File(new File(files, "logs"), "server.log"), 25);
+        logView.setText(tail.isEmpty() ? "（暂无日志）" : tail);
     }
 
     @Override

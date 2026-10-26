@@ -26,6 +26,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ConfigActivity"
+            android:exported="false"
+            android:label="编辑 config.json" />
+
         <service
             android:name=".ServerService"
             android:exported="false" />

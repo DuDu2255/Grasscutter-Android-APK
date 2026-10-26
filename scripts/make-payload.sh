@@ -41,7 +41,6 @@ curl -L --retry 3 -o "$WORK/grasscutter.jar" \
   https://github.com/MeChen618/AstaPS/releases/latest/download/grasscutter.jar || fail "下载 grasscutter.jar 失败"
 test -s "$WORK/grasscutter.jar" || fail "grasscutter.jar 为空"
 cp "$WORK/grasscutter.jar" "$ROOTFS/opt/astaps/grasscutter.jar"
-cp "$ROOT/app/config.json" "$ROOTFS/opt/astaps/config.json"
 printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$ROOTFS/etc/resolv.conf"
 
 echo "== payload =="

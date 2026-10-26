@@ -1,22 +1,19 @@
 # AstaPS Android APK
 
-把 AstaPS（原神 7.1 私服）打包成一个**不需要 Termux** 的安卓 App，后台以常驻通知服务的方式运行。
+把 AstaPS（原神 7.1 私服）打包成一个**不需要 Termux** 的安卓 App，后台以常驻通知服务运行。
 
-## 原理
-- APK 内嵌 `payload.tar.gz`：Ubuntu base (arm64) + JRE 21 + MongoDB 7.0 + proot + `grasscutter.jar`
-- 首次启动解压到 App 私有目录，用 proot 起 `mongod` 与 `java -jar grasscutter.jar`
-- 前台服务 + WakeLock，锁屏/切后台不中断
-- 资源包（2.5 GB）不内嵌，App 里点「下载资源」从 AstaPS-Resource 仓库下载后「解压资源」
+## 界面
+- **启动 / 停止**：拉起 proot 内的 MongoDB + 服务端（dispatch 10086 / 网关 22101）
+- **导入 JAR**：选一个 `grasscutter.jar`（自动替换内置版本）
+- **导入资源包**：选 resources 压缩包（zip），App 内解压到 `Android/data/com.dudu2255.astaps/files/resources`
+- **编辑 config.json**：内置编辑器，保存后重启服务生效
 
-## 使用
-1. 安装 APK → 打开 → 点「下载资源」，等下载完成
-2. 点「解压资源」，等解压完成（约 5-10 分钟）
-3. 点「启动」，状态变为 `运行中 · dispatch 127.0.0.1:10086`
-4. 游戏客户端按需打补丁并指向 `http://<手机IP>:10086`
-
-端口：dispatch 10086 / 网关 22101(UDP) / MongoDB 27017
-存储占用：约 4 GB（运行环境 ~1.2 GB + 资源 ~2.5 GB）
+## 首次使用
+1. 启动一次（或先导入 JAR），让 App 解压内置运行环境（Ubuntu 24.04 + JRE21 + MongoDB 7.0 + proot）
+2. 导入资源包（AstaPS-Resource 打包的 zip，约 1.5–2 GB）
+3. 点启动，状态显示 `运行中 · dispatch 127.0.0.1:10086`
+4. 客户端需打补丁并指向 `http://<手机IP>:10086`
 
 ## 构建
-推送到 `main` 分支后 GitHub Actions 自动：下载 ubuntu-base/JRE/MongoDB/jar → 打包 payload →
-Gradle 编译签名 APK → 上传 artifact 并发布 Release。
+推送到 `main` 触发 GitHub Actions：docker+binfmt 构建 arm64 rootfs → 打包 payload →
+Gradle 编译签名 APK → 发布 Release（tag `build-<run>`）。失败时日志推到 `ci-log` 分支。

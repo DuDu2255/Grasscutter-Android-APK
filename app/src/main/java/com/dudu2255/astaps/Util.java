@@ -235,4 +235,52 @@ public final class Util {
         }
         return v;
     }
+    /** 从输入流解压 zip；自动去掉唯一的顶层目录 */
+    public static void unzip(InputStream raw, File dest, Progress cb) throws IOException {
+        byte[] buf = new byte[1 << 16];
+        int count = 0;
+        String prefix = null;
+        boolean first = true;
+        try (ZipInputStream zin = new ZipInputStream(new BufferedInputStream(raw, 1 << 16))) {
+            ZipEntry e;
+            while ((e = zin.getNextEntry()) != null) {
+                String name = e.getName().replace('\\', '/');
+                if (first) {
+                    first = false;
+                    int slash = name.indexOf('/');
+                    if (slash > 0 && name.endsWith("/") && name.indexOf('/', slash + 1) < 0) {
+                        prefix = name.substring(0, slash + 1);
+                    }
+                }
+                if (prefix != null && name.startsWith(prefix)) name = name.substring(prefix.length());
+                if (name.isEmpty()) continue;
+                File out = new File(dest, name);
+                if (e.isDirectory()) {
+                    out.mkdirs();
+                    continue;
+                }
+                if (out.getParentFile() != null) out.getParentFile().mkdirs();
+                try (OutputStream os = new BufferedOutputStream(new FileOutputStream(out), 1 << 16)) {
+                    int n;
+                    while ((n = zin.read(buf)) > 0) os.write(buf, 0, n);
+                }
+                count++;
+                if (cb != null && count % 300 == 0) cb.onProgress("解压 " + count + " 个文件");
+            }
+        }
+    }
+
+    public static void copy(InputStream in, File dst) throws IOException {
+        if (dst.getParentFile() != null) dst.getParentFile().mkdirs();
+        try (OutputStream os = new BufferedOutputStream(new FileOutputStream(dst), 1 << 16)) {
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+        }
+    }
+
+    public static long dirCount(File dir) {
+        String[] list = dir.list();
+        return list == null ? 0 : list.length;
+    }
 }
