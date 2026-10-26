@@ -57,7 +57,7 @@ jobs:
           body: "自动构建的 AstaPS 安卓服务端 APK"
           files: |
             AstaPS-*.apk
-            app/src/main/assets/payload.bin
+            payload.tar.gz
 
       - name: Publish failure log
         if: failure()
