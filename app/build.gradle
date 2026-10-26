@@ -1,0 +1,43 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.dudu2255.astaps'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.dudu2255.astaps"
+        minSdk 26
+        targetSdk 28
+        versionCode 1
+        versionName "1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    aaptOptions {
+        noCompress 'gz', 'jar', 'tar', 'tgz', 'xz'
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('keystore.jks')
+            storePassword 'astaps123'
+            keyAlias 'astaps'
+            keyPassword 'astaps123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    packagingOptions {
+        jniLibs { useLegacyPackaging = true }
+    }
+}

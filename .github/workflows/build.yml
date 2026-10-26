@@ -1,0 +1,53 @@
+name: build-apk
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install qemu-user-static
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user-static binfmt-support
+          sudo update-binfmts --enable qemu-aarch64 || true
+
+      - name: Prepare payload
+        run: bash scripts/make-payload.sh
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build APK
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "AstaPS-build${GITHUB_RUN_NUMBER}.apk"
+          ls -lh AstaPS-*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: astaps-apk
+          path: AstaPS-*.apk
+          compression-level: 0
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: AstaPS APK ${{ github.run_number }}
+          body: "自动构建的 AstaPS 安卓服务端 APK"
+          files: AstaPS-*.apk

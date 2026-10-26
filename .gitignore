@@ -1,0 +1,7 @@
+build-check/
+build-payload/
+.gradle/
+app/build/
+local.properties
+*.apk
+*.log
