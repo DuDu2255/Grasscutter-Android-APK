@@ -26,6 +26,7 @@ public class ServerService extends Service {
     public static final String ACTION_STOP = "com.dudu2255.astaps.STOP";
     public static final String ACTION_IMPORT_JAR = "com.dudu2255.astaps.IMPORT_JAR";
     public static final String ACTION_IMPORT_RES = "com.dudu2255.astaps.IMPORT_RES";
+    public static final String ACTION_IMPORT_PLUGIN = "com.dudu2255.astaps.IMPORT_PLUGIN";
     public static final String EXTRA_URI = "uri";
 
     public static final String PAYLOAD_URL =
@@ -56,6 +57,10 @@ public class ServerService extends Service {
 
     public static void importResources(Context c, Uri uri) {
         send(c, new Intent(c, ServerService.class).setAction(ACTION_IMPORT_RES).putExtra(EXTRA_URI, uri));
+    }
+
+    public static void importPlugin(Context c, Uri uri) {
+        send(c, new Intent(c, ServerService.class).setAction(ACTION_IMPORT_PLUGIN).putExtra(EXTRA_URI, uri));
     }
 
     private static void send(Context c, Intent i) {
@@ -120,6 +125,11 @@ public class ServerService extends Service {
         if (ACTION_IMPORT_RES.equals(action)) {
             final Uri uri = intent.getParcelableExtra(EXTRA_URI);
             new Thread(() -> doImportResources(uri), "astaps-res").start();
+            return START_STICKY;
+        }
+        if (ACTION_IMPORT_PLUGIN.equals(action)) {
+            final Uri uri = intent.getParcelableExtra(EXTRA_URI);
+            new Thread(() -> doImportPlugin(uri), "astaps-plugin").start();
             return START_STICKY;
         }
         if (worker == null || !worker.isAlive()) {
@@ -209,6 +219,69 @@ public class ServerService extends Service {
         } catch (Exception e) {
             log("导入资源包失败: " + e);
             setStatus("导入资源失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
+        }
+    }
+
+    private String queryName(Uri uri) {
+        try (android.database.Cursor c = getContentResolver().query(uri, null, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (i >= 0) return c.getString(i);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private File pluginsStash() {
+        File d = new File(files(), "plugins");
+        d.mkdirs();
+        return d;
+    }
+
+    private File pluginsDir() {
+        return new File(serverDir(), "plugins");
+    }
+
+    private void doImportPlugin(Uri uri) {
+        try {
+            if (uri == null) {
+                setStatus("没有选择文件");
+                return;
+            }
+            String name = queryName(uri);
+            if (name == null || !name.toLowerCase().endsWith(".jar")) {
+                name = "plugin-" + System.currentTimeMillis() + ".jar";
+            }
+            File dst = new File(pluginsStash(), name);
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new IOException("无法读取文件");
+                Util.copy(in, dst);
+            }
+            syncPlugins();
+            setStatus("插件已导入 " + name + "（重启服务生效）");
+        } catch (Exception e) {
+            log("导入插件失败: " + e);
+            setStatus("导入插件失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
+        }
+    }
+
+    private void syncPlugins() {
+        File stash = pluginsStash();
+        File target = pluginsDir();
+        if (!serverDir().exists()) return;
+        target.mkdirs();
+        File[] list = stash.listFiles();
+        if (list == null) return;
+        for (File f : list) {
+            if (!f.isFile() || !f.getName().toLowerCase().endsWith(".jar")) continue;
+            File out = new File(target, f.getName());
+            if (out.exists() && out.length() == f.length()) continue;
+            try (InputStream in = new FileInputStream(f)) {
+                Util.copy(in, out);
+            } catch (Exception e) {
+                log("复制插件失败 " + f.getName() + ": " + e);
+            }
         }
     }
 
@@ -326,6 +399,7 @@ public class ServerService extends Service {
             }
             ensureConfig();
             applyImportedJar();
+            syncPlugins();
 
             if (!ensureResources()) {
                 running = false;

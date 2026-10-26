@@ -22,6 +22,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_JAR = 1001;
     private static final int REQ_RES = 1002;
+    private static final int REQ_PLUGIN = 1003;
 
     private TextView statusView;
     private TextView infoView;
@@ -80,6 +81,7 @@ public class MainActivity extends Activity {
         root.addView(row3);
         row3.addView(button("编辑 config.json", v ->
                 startActivity(new Intent(this, ConfigActivity.class))));
+        row3.addView(button("导入插件", v -> pick(REQ_PLUGIN)));
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -128,6 +130,9 @@ public class MainActivity extends Activity {
         } else if (requestCode == REQ_RES) {
             ServerService.importResources(this, uri);
             toast("正在复制资源包（不解压）");
+        } else if (requestCode == REQ_PLUGIN) {
+            ServerService.importPlugin(this, uri);
+            toast("正在导入插件…");
         }
     }
 
@@ -153,6 +158,7 @@ public class MainActivity extends Activity {
             info.append("（已导入 ").append(imported.length() / 1024 / 1024).append(" MB）");
         }
         info.append("\n配置: ").append(config.exists() ? "可编辑" : "默认");
+        info.append("\n插件: ").append(Util.dirCount(new File(files, "plugins"))).append(" 个");
         info.append("\n资源包: ").append(resSize > 0
                 ? (resSize / 1024 / 1024) + " MB (Resources.zip)" : "未导入");
         infoView.setText(info.toString());
