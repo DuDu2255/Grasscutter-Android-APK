@@ -298,6 +298,8 @@ public class ServerService extends Service {
         pb.environment().put("LD_PRELOAD", "");
         pb.environment().put("LD_LIBRARY_PATH", files().getAbsolutePath());
         pb.environment().put("PROOT_TMP_DIR", new File(files(), "tmp").getAbsolutePath());
+        pb.environment().put("PROOT_LOADER", new File(files(), "loader").getAbsolutePath());
+        pb.environment().put("PROOT_LOADER_32", new File(files(), "loader32").getAbsolutePath());
         pb.environment().put("HOME", files().getAbsolutePath());
         pb.environment().put("TMPDIR", new File(files(), "tmp").getAbsolutePath());
         pb.redirectOutput(ProcessBuilder.Redirect.appendTo(out));
