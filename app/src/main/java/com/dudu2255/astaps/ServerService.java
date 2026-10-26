@@ -26,6 +26,8 @@ public class ServerService extends Service {
     public static final String ACTION_IMPORT_JAR = "com.dudu2255.astaps.IMPORT_JAR";
     public static final String ACTION_IMPORT_RES = "com.dudu2255.astaps.IMPORT_RES";
     public static final String EXTRA_URI = "uri";
+    public static final String PAYLOAD_URL =
+            "https://github.com/DuDu2255/Grasscutter-Android-APK/releases/latest/download/payload.tar.gz";
 
     private static final String CHANNEL = "astaps";
     private static final int NOTIF_ID = 1;
@@ -209,15 +211,16 @@ public class ServerService extends Service {
                 setStatus("没有选择文件");
                 return;
             }
-            File out = resourcesDir();
-            setStatus("解压资源包…");
+            setStatus("复制资源包…");
+            File zip = new File(files(), "resources.zip");
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 if (in == null) throw new IOException("无法读取文件");
-                Util.unzip(in, out, msg -> setStatus(msg));
+                Util.copy(in, zip);
             }
-            setStatus("资源包已导入（" + Util.dirCount(out) + " 项）");
+            setStatus("资源包已导入 " + (zip.length() / 1024 / 1024) + " MB，点启动自动解压");
         } catch (Exception e) {
-            setStatus("导入资源失败：" + e.getMessage());
+            log("导入资源包失败: " + e);
+            setStatus("导入资源失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
         }
     }
 
@@ -270,12 +273,11 @@ public class ServerService extends Service {
             ensureConfig();
             applyImportedJar();
 
-            File res = resourcesDir();
-            if (!res.isDirectory() || Util.dirCount(res) == 0) {
-                setStatus("还没有资源包，先点「导入资源包」");
+            if (!ensureResources()) {
                 running = false;
                 return;
             }
+            File res = resourcesDir();
 
             File log = logFile();
 
@@ -328,27 +330,121 @@ public class ServerService extends Service {
     }
 
     private boolean installPayload() {
+        File tar = new File(files(), "payload.tar.gz");
         try {
-            setStatus("首次运行：解压运行环境…");
-            File tar = new File(files(), "payload.tar.gz");
-            if (!tar.exists()) {
-                try (InputStream in = getAssets().open("payload.tar.gz");
-                     FileOutputStream os = new FileOutputStream(tar)) {
-                    byte[] buf = new byte[1 << 16];
-                    int n;
-                    while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            long free = files().getUsableSpace();
+            if (free < 2L * 1024 * 1024 * 1024) {
+                setStatus("存储空间不足：运行环境需要约 2 GB（当前可用 " + (free / 1024 / 1024) + " MB）");
+                return false;
+            }
+
+            setStatus("首次运行：准备运行环境…");
+            if (!tar.exists() || tar.length() < 100L * 1024 * 1024) {
+                boolean ok = false;
+                try {
+                    copyAsset(findPayloadAsset(), tar);
+                    ok = true;
+                } catch (Exception e) {
+                    log("内置 payload 读取失败: " + e);
+                }
+                if (!ok) {
+                    setStatus("内置运行环境缺失，正在联网下载（约 600 MB）…");
+                    download(PAYLOAD_URL, tar);
                 }
             }
+
+            setStatus("解压运行环境…");
             Util.untarGz(tar, files(), this::setStatus);
             try {
                 android.system.Os.chmod(new File(files(), "proot").getAbsolutePath(), 0755);
             } catch (Exception ignored) {
             }
+            if (!new File(rootfs(), "usr/lib/jvm").exists()) {
+                setStatus("解压后缺少 java，运行环境包不完整");
+                return false;
+            }
             tar.delete();
             setStatus("运行环境就绪");
             return true;
         } catch (Exception e) {
-            setStatus("解压失败：" + e.getMessage());
+            log("解压运行环境失败: " + e);
+            setStatus("解压失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
+            tar.delete();
+            return false;
+        }
+    }
+
+    /** aapt 打包时可能改写扩展名（payload.tar.gz -> payload.tar），这里按前缀查找 */
+    private String findPayloadAsset() throws IOException {
+        String[] list = getAssets().list("");
+        if (list != null) {
+            for (String n : list) {
+                if (n.startsWith("payload")) return n;
+            }
+        }
+        return "payload.tar.gz";
+    }
+
+    private void copyAsset(String name, File dst) throws IOException {
+        try (InputStream in = getAssets().open(name);
+             FileOutputStream os = new FileOutputStream(dst)) {
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+        }
+    }
+
+    private void download(String url, File dst) throws IOException {
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        c.setInstanceFollowRedirects(true);
+        c.connect();
+        long total = c.getContentLength();
+        try (InputStream in = c.getInputStream();
+             FileOutputStream os = new FileOutputStream(dst)) {
+            byte[] buf = new byte[1 << 16];
+            long done = 0;
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                os.write(buf, 0, n);
+                done += n;
+                if (done % (8 * 1024 * 1024) < buf.length) {
+                    setStatus("下载运行环境 " + (done / 1024 / 1024) + " MB / " + (total / 1024 / 1024) + " MB");
+                }
+            }
+        } finally {
+            c.disconnect();
+        }
+    }
+
+    private void log(String msg) {
+        try {
+            FileOutputStream os = new FileOutputStream(logFile(), true);
+            os.write((msg + "\n").getBytes("UTF-8"));
+            os.close();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 启动前把 resources.zip 解压成目录（导入资源包只负责把 zip 放好） */
+    private boolean ensureResources() {
+        File res = resourcesDir();
+        if (res.isDirectory() && Util.dirCount(res) > 0) return true;
+
+        File zip = new File(files(), "resources.zip");
+        if (!zip.exists()) {
+            setStatus("还没有资源包，先点「导入资源包」");
+            return false;
+        }
+        try {
+            setStatus("解压资源包…");
+            try (InputStream in = new java.io.FileInputStream(zip)) {
+                Util.unzip(in, res, this::setStatus);
+            }
+            setStatus("资源包解压完成（" + Util.dirCount(res) + " 项）");
+            return true;
+        } catch (Exception e) {
+            log("解压资源包失败: " + e);
+            setStatus("资源包解压失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
             return false;
         }
     }

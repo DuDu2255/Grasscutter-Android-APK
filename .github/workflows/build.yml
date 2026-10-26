@@ -54,7 +54,9 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: AstaPS APK ${{ github.run_number }}
           body: "自动构建的 AstaPS 安卓服务端 APK"
-          files: AstaPS-*.apk
+          files: |
+            AstaPS-*.apk
+            app/src/main/assets/payload.tar.gz
 
       - name: Publish failure log
         if: failure()
