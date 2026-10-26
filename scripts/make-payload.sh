@@ -29,7 +29,8 @@ sudo tar -xzf "$WORK/base.tgz" -C "$ROOTFS"
 echo "== install runtime libs (qemu) =="
 sudo cp /usr/bin/qemu-aarch64-static "$ROOTFS/usr/bin/" || fail "缺少 qemu-aarch64-static"
 sudo rm -f "$ROOTFS/etc/resolv.conf"
-sudo cp /etc/resolv.conf "$ROOTFS/etc/resolv.conf"
+echo "nameserver 1.1.1.1" | sudo tee "$ROOTFS/etc/resolv.conf" > /dev/null
+echo "nameserver 8.8.8.8" | sudo tee -a "$ROOTFS/etc/resolv.conf" > /dev/null
 for m in dev dev/pts proc sys; do
   sudo mkdir -p "$ROOTFS/$m"
   sudo mount --bind "/$m" "$ROOTFS/$m" || fail "挂载 /$m 失败"

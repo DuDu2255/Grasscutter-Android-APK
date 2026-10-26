@@ -25,7 +25,23 @@ jobs:
           sudo update-binfmts --enable qemu-aarch64 || true
 
       - name: Prepare payload
-        run: bash scripts/make-payload.sh
+        run: |
+          set -o pipefail
+          bash scripts/make-payload.sh 2>&1 | tee payload-build.log
+
+      - name: Publish failure log
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/logout
+          cp payload-build.log /tmp/logout/payload-build.log 2>/dev/null || true
+          cp build-payload/chroot.log /tmp/logout/chroot.log 2>/dev/null || true
+          cd /tmp/logout
+          git init -q .
+          git config user.name "ci"; git config user.email "ci@users.noreply.github.com"
+          git add -A && git commit -qm "ci failure log run ${{ github.run_number }}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:ci-log
 
       - uses: gradle/actions/setup-gradle@v4
         with:
