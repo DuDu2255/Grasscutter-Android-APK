@@ -83,6 +83,10 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(this, ConfigActivity.class))));
         row3.addView(button("导入插件", v -> pick(REQ_PLUGIN)));
 
+        LinearLayout row4 = new LinearLayout(this);
+        root.addView(row4);
+        row4.addView(button("后台运行设置", v -> openBackgroundSettings()));
+
         ScrollView scroll = new ScrollView(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
@@ -138,6 +142,14 @@ public class MainActivity extends Activity {
 
     private void toast(String s) {
         Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
+    }
+
+    private void openBackgroundSettings() {
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        } catch (Exception e) {
+            toast("无法打开电池优化设置：" + e.getMessage());
+        }
     }
 
     private void refresh() {

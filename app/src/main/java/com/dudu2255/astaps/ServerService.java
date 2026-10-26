@@ -42,6 +42,8 @@ public class ServerService extends Service {
     private Process mongoProc;
     private Process javaProc;
     private Thread worker;
+    private volatile boolean stopRequested;
+    private int activeImports;
 
     public static void start(Context c) {
         send(c, new Intent(c, ServerService.class).setAction(ACTION_START));
@@ -113,30 +115,56 @@ public class ServerService extends Service {
         if (!wake.isHeld()) wake.acquire();
 
         if (ACTION_STOP.equals(action)) {
+            stopRequested = true;
+            Thread activeWorker = worker;
+            if (activeWorker != null) activeWorker.interrupt();
             stopAll();
             stopSelf();
             return START_NOT_STICKY;
         }
         if (ACTION_IMPORT_JAR.equals(action)) {
             final Uri uri = intent.getParcelableExtra(EXTRA_URI);
-            new Thread(() -> doImportJar(uri), "astaps-jar").start();
+            startImport(() -> doImportJar(uri), startId, "astaps-jar");
             return START_STICKY;
         }
         if (ACTION_IMPORT_RES.equals(action)) {
             final Uri uri = intent.getParcelableExtra(EXTRA_URI);
-            new Thread(() -> doImportResources(uri), "astaps-res").start();
+            startImport(() -> doImportResources(uri), startId, "astaps-res");
             return START_STICKY;
         }
         if (ACTION_IMPORT_PLUGIN.equals(action)) {
             final Uri uri = intent.getParcelableExtra(EXTRA_URI);
-            new Thread(() -> doImportPlugin(uri), "astaps-plugin").start();
+            startImport(() -> doImportPlugin(uri), startId, "astaps-plugin");
             return START_STICKY;
         }
         if (worker == null || !worker.isAlive()) {
+            stopRequested = false;
             worker = new Thread(this::runServer, "astaps-server");
             worker.start();
         }
         return START_STICKY;
+    }
+
+    private void startImport(Runnable task, int startId, String name) {
+        synchronized (this) {
+            activeImports++;
+        }
+        new Thread(() -> {
+            try {
+                task.run();
+            } finally {
+                boolean idle;
+                synchronized (ServerService.this) {
+                    activeImports--;
+                    idle = activeImports == 0 && !running;
+                }
+                if (idle && !stopRequested) {
+                    if (wake != null && wake.isHeld()) wake.release();
+                    stopForeground(true);
+                    stopSelfResult(startId);
+                }
+            }
+        }, name).start();
     }
 
     private File files() {
@@ -251,6 +279,10 @@ public class ServerService extends Service {
             }
             String name = queryName(uri);
             if (name == null || !name.toLowerCase().endsWith(".jar")) {
+                name = "plugin-" + System.currentTimeMillis() + ".jar";
+            }
+            name = new File(name).getName().replaceAll("[^A-Za-z0-9._-]", "_");
+            if (name.isEmpty() || name.equals(".") || name.equals("..")) {
                 name = "plugin-" + System.currentTimeMillis() + ".jar";
             }
             File dst = new File(pluginsStash(), name);
@@ -422,6 +454,8 @@ public class ServerService extends Service {
                         "--bind_ip", "127.0.0.1",
                         "--port", "27017", "--quiet"), log);
                 for (int i = 0; i < 90 && !Util.portOpen("127.0.0.1", 27017); i++) {
+                    if (stopRequested) return;
+                    if (!mongoProc.isAlive()) break;
                     Thread.sleep(1000);
                 }
                 if (!Util.portOpen("127.0.0.1", 27017)) {
@@ -443,6 +477,8 @@ public class ServerService extends Service {
             javaProc = exec(cmd, log);
 
             for (int i = 0; i < 180; i++) {
+                if (stopRequested) return;
+                if (!javaProc.isAlive()) break;
                 if (Util.portOpen("127.0.0.1", 10086)) break;
                 Thread.sleep(1000);
             }
@@ -453,12 +489,17 @@ public class ServerService extends Service {
             }
 
             int code = javaProc.waitFor();
-            setStatus("服务端已退出 (code " + code + ")，点启动重试");
+            if (!stopRequested) setStatus("服务端已退出 (code " + code + ")，点启动重试");
         } catch (Exception e) {
-            log("启动失败: " + e);
-            setStatus("启动出错：" + e.getClass().getSimpleName() + " " + e.getMessage());
+            if (!stopRequested) {
+                log("启动失败: " + e);
+                setStatus("启动出错：" + e.getClass().getSimpleName() + " " + e.getMessage());
+            }
         } finally {
             running = false;
+            stopAll();
+            stopForeground(true);
+            stopSelf();
         }
     }
 
@@ -590,17 +631,29 @@ public class ServerService extends Service {
     }
 
     private void stopAll() {
-        try {
-            if (javaProc != null) javaProc.destroy();
-        } catch (Exception ignored) {
-        }
-        try {
-            if (mongoProc != null) mongoProc.destroy();
-        } catch (Exception ignored) {
-        }
+        stopProcess(javaProc);
+        stopProcess(mongoProc);
+        javaProc = null;
+        mongoProc = null;
         running = false;
-        status = "已停止";
+        if (stopRequested) status = "已停止";
         if (wake != null && wake.isHeld()) wake.release();
+    }
+
+    private void stopProcess(Process process) {
+        if (process == null) return;
+        try {
+            process.destroy();
+            new Thread(() -> {
+                try {
+                    if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    process.destroyForcibly();
+                }
+            }, "astaps-stop-process").start();
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
