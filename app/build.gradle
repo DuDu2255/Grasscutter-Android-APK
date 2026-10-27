@@ -1,7 +1,5 @@
 plugins { id 'com.android.application' }
 
-def signingPath = System.getenv('ANDROID_KEYSTORE_PATH')
-
 android {
     namespace 'com.dudu2255.astaps'
     compileSdk 34
@@ -24,20 +22,18 @@ android {
     }
 
     signingConfigs {
-        if (signingPath) {
-            release {
-                storeFile file(signingPath)
-                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('ANDROID_KEY_ALIAS')
-                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
-            }
+        release {
+            storeFile file('keystore.jks')
+            storePassword 'astaps123'
+            keyAlias 'astaps'
+            keyPassword 'astaps123'
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            if (signingPath) signingConfig signingConfigs.release
+            signingConfig signingConfigs.release
         }
     }
 
