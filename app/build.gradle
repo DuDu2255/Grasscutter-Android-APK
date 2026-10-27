@@ -1,5 +1,8 @@
 plugins { id 'com.android.application' }
 
+def ciBuildNumber = System.getenv('GITHUB_RUN_NUMBER')
+def appVersionCode = ciBuildNumber == null ? 2 : ciBuildNumber.toInteger()
+
 android {
     namespace 'com.dudu2255.astaps'
     compileSdk 36
@@ -8,8 +11,8 @@ android {
         applicationId "com.dudu2255.astaps"
         minSdk 26
         targetSdk 36
-        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '2').toInteger()
-        versionName "1.0.${System.getenv('GITHUB_RUN_NUMBER') ?: '2'}"
+        versionCode appVersionCode
+        versionName "1.0.${appVersionCode}"
     }
 
     compileOptions {
