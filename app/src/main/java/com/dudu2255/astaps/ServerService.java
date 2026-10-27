@@ -208,6 +208,11 @@ public class ServerService extends Service {
         return new File(rootfs(), "opt/astaps");
     }
 
+    private File prootExecutable() {
+        File installedNative = new File(getApplicationInfo().nativeLibraryDir, "libproot.so");
+        return installedNative.isFile() ? installedNative : new File(files(), "proot");
+    }
+
     private File jarFile() {
         return new File(serverDir(), "grasscutter.jar");
     }
@@ -413,7 +418,7 @@ public class ServerService extends Service {
         File tmp = new File(files(), "tmp");
         tmp.mkdirs();
         List<String> c = new ArrayList<>();
-        c.add(new File(files(), "proot").getAbsolutePath());
+        c.add(prootExecutable().getAbsolutePath());
         c.add("--kill-on-exit");
         c.add("--link2symlink");
         c.add("-0");
@@ -723,16 +728,18 @@ public class ServerService extends Service {
     }
 
     private void ensureProotExecutable() throws IOException {
-        File proot = new File(files(), "proot");
+        File proot = prootExecutable();
         if (!proot.isFile()) throw new IOException("运行环境缺少 proot: " + proot.getAbsolutePath());
         try {
-            android.system.Os.chmod(proot.getAbsolutePath(), 0755);
+            if (!proot.canExecute()) android.system.Os.chmod(proot.getAbsolutePath(), 0755);
             android.system.StructStat stat = android.system.Os.stat(proot.getAbsolutePath());
             int permissions = stat.st_mode & 0777;
             log("proot mode=" + Integer.toOctalString(stat.st_mode) + " size=" + stat.st_size);
             if ((permissions & 0111) == 0) {
-                throw new IOException("proot 执行权限修复失败，mode="
-                        + Integer.toOctalString(stat.st_mode));
+                throw new IOException("proot 执行位缺失，mode=" + Integer.toOctalString(stat.st_mode));
+            }
+            if (!proot.canExecute()) {
+                throw new IOException("系统禁止执行 proot 文件：" + proot.getAbsolutePath());
             }
         } catch (android.system.ErrnoException e) {
             throw new IOException("无法修复 proot 执行权限", e);
