@@ -519,6 +519,7 @@ public class ServerService extends Service {
                     return false;
                 }
             }
+            ensureProotExecutable();
             if (!new File(files(), ".perms-ok").exists()) {
                 setStatus("修复文件权限…");
                 fixPerms(rootfs());
@@ -718,6 +719,23 @@ public class ServerService extends Service {
         try {
             android.system.Os.chmod(f.getAbsolutePath(), mode);
         } catch (Exception ignored) {
+        }
+    }
+
+    private void ensureProotExecutable() throws IOException {
+        File proot = new File(files(), "proot");
+        if (!proot.isFile()) throw new IOException("运行环境缺少 proot: " + proot.getAbsolutePath());
+        try {
+            android.system.Os.chmod(proot.getAbsolutePath(), 0755);
+            android.system.StructStat stat = android.system.Os.stat(proot.getAbsolutePath());
+            int permissions = stat.st_mode & 0777;
+            log("proot mode=" + Integer.toOctalString(stat.st_mode) + " size=" + stat.st_size);
+            if ((permissions & 0111) == 0) {
+                throw new IOException("proot 执行权限修复失败，mode="
+                        + Integer.toOctalString(stat.st_mode));
+            }
+        } catch (android.system.ErrnoException e) {
+            throw new IOException("无法修复 proot 执行权限", e);
         }
     }
 
