@@ -1,4 +1,4 @@
-name: build-apk
+name: build-grasscutter-android
 
 on:
   push:
@@ -41,23 +41,23 @@ jobs:
 
       - name: Collect APK
         run: |
-          cp app/build/outputs/apk/release/app-release.apk "AstaPS-build${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "Grasscutter-Android-${GITHUB_RUN_NUMBER}.apk"
           cp app/src/main/assets/payload.bin payload.tar.gz
-          ls -lh AstaPS-*.apk payload.tar.gz
+          ls -lh Grasscutter-Android-*.apk payload.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: astaps-apk
-          path: AstaPS-*.apk
+          name: grasscutter-android-apk
+          path: Grasscutter-Android-*.apk
           compression-level: 0
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: AstaPS APK ${{ github.run_number }}
-          body: "自动构建的 AstaPS 安卓服务端 APK"
+          name: Grasscutter Android ${{ github.run_number }}
+          body: "自动构建的 Grasscutter Android 服务端 APK"
           files: |
-            AstaPS-*.apk
+            Grasscutter-Android-*.apk
             payload.tar.gz
 
       - name: Publish failure log

@@ -1,6 +1,6 @@
-# AstaPS Android APK
+# Grasscutter Android
 
-把 AstaPS（原神 7.1 私服）打包成一个**不需要 Termux** 的安卓 App，兼容 Android 8.0 至 Android 16，后台以常驻通知服务运行。
+把 Grasscutter（原神 7.1 私服）打包成一个**不需要 Termux** 的安卓 App，兼容 Android 8.0 至 Android 16，后台以常驻通知服务运行。
 
 ## 界面
 - **启动 / 停止**：拉起 proot 内的 MongoDB + 服务端（dispatch 10086 / 网关 22101）
@@ -12,7 +12,7 @@
 
 ## 首次使用
 1. 启动一次（或先导入 JAR），让 App 解压内置运行环境（Ubuntu 24.04 + JRE21 + MongoDB 7.0 + proot）
-2. 导入资源包（AstaPS-Resource 打包的 zip，约 1.5–2 GB）
+2. 导入对应版本的 Grasscutter 资源包 zip（约 1.5–2 GB）
 3. 点启动，状态显示 `运行中 · dispatch 127.0.0.1:10086`
 4. 客户端需打补丁并指向 `http://<手机IP>:10086`
 

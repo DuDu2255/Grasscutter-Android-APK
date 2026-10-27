@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
         });
 
         TextView title = new TextView(this);
-        title.setText("AstaPS 服务器 (原神 7.1)");
+        title.setText("Grasscutter Android · 原神 7.1");
         title.setTextSize(22);
         root.addView(title);
 

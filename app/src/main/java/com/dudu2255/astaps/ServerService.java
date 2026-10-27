@@ -92,7 +92,7 @@ public class ServerService extends Service {
         wake.setReferenceCounted(false);
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = getSystemService(NotificationManager.class);
-            NotificationChannel ch = new NotificationChannel(CHANNEL, "AstaPS", NotificationManager.IMPORTANCE_LOW);
+            NotificationChannel ch = new NotificationChannel(CHANNEL, "Grasscutter Android", NotificationManager.IMPORTANCE_LOW);
             ch.setShowBadge(false);
             nm.createNotificationChannel(ch);
         }
@@ -102,7 +102,7 @@ public class ServerService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL)
                 : new Notification.Builder(this);
-        b.setContentTitle("AstaPS 服务器")
+        b.setContentTitle("Grasscutter Android 服务器")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
                 .setOngoing(true);
