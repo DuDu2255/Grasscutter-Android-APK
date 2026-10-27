@@ -6,7 +6,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$ROOT/build-payload
 ROOTFS=$WORK/rootfs
 rm -rf "$WORK"
-mkdir -p "$WORK" "$ROOT/app/src/main/assets"
+JNI_LIBS=$ROOT/app/src/main/jniLibs/arm64-v8a
+mkdir -p "$WORK" "$ROOT/app/src/main/assets" "$JNI_LIBS"
+rm -f "$JNI_LIBS/libmongod.so" "$JNI_LIBS/libldlinux.so" \
+  "$JNI_LIBS/libguestenv.so" "$JNI_LIBS/libguestjava.so"
 
 fail() { echo "::error::$*"; exit 1; }
 
@@ -34,6 +37,18 @@ curl -L --retry 3 -o "$WORK/mongo.tgz" \
 mkdir -p "$ROOTFS/opt/mongodb"
 tar -xzf "$WORK/mongo.tgz" -C "$ROOTFS/opt/mongodb" --strip-components=1
 test -x "$ROOTFS/opt/mongodb/bin/mongod" || fail "MongoDB 解压异常"
+
+echo "== package Android-executable guest programs =="
+cp "$ROOTFS/opt/mongodb/bin/mongod" "$JNI_LIBS/libmongod.so"
+cp -L "$ROOTFS/lib/ld-linux-aarch64.so.1" "$JNI_LIBS/libldlinux.so"
+cp "$ROOTFS/usr/bin/env" "$JNI_LIBS/libguestenv.so"
+cp "$ROOTFS/usr/lib/jvm/java-21-openjdk-arm64/bin/java" "$JNI_LIBS/libguestjava.so"
+chmod 755 "$JNI_LIBS/libmongod.so" "$JNI_LIBS/libldlinux.so" \
+  "$JNI_LIBS/libguestenv.so" "$JNI_LIBS/libguestjava.so"
+test -x "$JNI_LIBS/libmongod.so" && test -x "$JNI_LIBS/libldlinux.so" \
+  && test -x "$JNI_LIBS/libguestenv.so" && test -x "$JNI_LIBS/libguestjava.so" \
+  || fail "guest executable packaging failed"
+rm "$ROOTFS/opt/mongodb/bin/mongod"
 
 echo "== grasscutter.jar =="
 mkdir -p "$ROOTFS/opt/astaps/data/db" "$ROOTFS/opt/astaps/resources" "$ROOTFS/opt/astaps/logs"

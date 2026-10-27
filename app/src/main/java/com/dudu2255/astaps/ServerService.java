@@ -213,6 +213,10 @@ public class ServerService extends Service {
         return installedNative.isFile() ? installedNative : new File(files(), "proot");
     }
 
+    private File nativeGuestExecutable(String name) {
+        return new File(getApplicationInfo().nativeLibraryDir, name);
+    }
+
     private File jarFile() {
         return new File(serverDir(), "grasscutter.jar");
     }
@@ -432,8 +436,20 @@ public class ServerService extends Service {
         c.add("/dev/urandom:/dev/random");
         c.add("-b");
         c.add(tmp.getAbsolutePath() + ":/tmp");
+        addNativeBind(c, "libmongod.so", "/opt/mongodb/bin/mongod");
+        addNativeBind(c, "libldlinux.so", "/lib/ld-linux-aarch64.so.1");
+        addNativeBind(c, "libguestenv.so", "/usr/bin/env");
+        addNativeBind(c, "libguestjava.so", "/usr/lib/jvm/java-21-openjdk-arm64/bin/java");
         for (String r : rest) c.add(r);
         return c;
+    }
+
+    private void addNativeBind(List<String> command, String library, String guestPath) {
+        File executable = nativeGuestExecutable(library);
+        if (executable.isFile()) {
+            command.add("-b");
+            command.add(executable.getAbsolutePath() + ":" + guestPath);
+        }
     }
 
     private Process exec(List<String> cmd, File out) throws IOException {
@@ -544,7 +560,7 @@ public class ServerService extends Service {
             File log = logFile();
             File mongoLog = mongoLogFile(this);
             try {
-                File mongod = new File(rootfs(), "opt/mongodb/bin/mongod");
+                File mongod = nativeGuestExecutable("libmongod.so");
                 android.system.StructStat st = android.system.Os.stat(mongod.getAbsolutePath());
                 log("mongod mode=" + Integer.toOctalString(st.st_mode) + " size=" + st.st_size);
             } catch (Exception e) {
@@ -552,8 +568,8 @@ public class ServerService extends Service {
             }
             if (!Util.portOpen("127.0.0.1", 27017)) {
                 setStatus("启动数据库 MongoDB…");
-                ensureRootfsExecutable("opt/mongodb/bin/mongod");
-                ensureRootfsExecutable("lib/ld-linux-aarch64.so.1");
+                ensureNativeGuestExecutable("libmongod.so");
+                ensureNativeGuestExecutable("libldlinux.so");
                 mongoProc = exec(prootCmd("-w", "/root",
                         "/opt/mongodb/bin/mongod",
                         "--dbpath", "/opt/astaps/data/db",
@@ -571,6 +587,8 @@ public class ServerService extends Service {
             }
 
             setStatus("启动游戏服务端…");
+            ensureNativeGuestExecutable("libguestenv.so");
+            ensureNativeGuestExecutable("libguestjava.so");
             List<String> cmd = prootCmd(
                     "-w", "/opt/astaps",
                     "/usr/bin/env", "-i",
@@ -748,39 +766,17 @@ public class ServerService extends Service {
         }
     }
 
-    private void ensureRootfsExecutable(String relativePath) throws IOException {
-        File root = rootfs();
-        File target = new File(root, relativePath);
-        if (!target.exists() || !target.isFile()) {
-            throw new IOException("运行环境缺少可执行文件: /" + relativePath);
+    private void ensureNativeGuestExecutable(String name) throws IOException {
+        File executable = nativeGuestExecutable(name);
+        if (!executable.isFile() || !executable.canExecute()) {
+            throw new IOException("APK 缺少可执行原生组件: " + executable.getAbsolutePath());
         }
         try {
-            File canonicalRoot = root.getCanonicalFile();
-            File canonicalTarget = target.getCanonicalFile();
-            if (!canonicalTarget.getPath().startsWith(canonicalRoot.getPath() + File.separator)) {
-                throw new IOException("运行环境可执行文件路径越界: /" + relativePath);
-            }
-
-            File parent = canonicalTarget.getParentFile();
-            while (parent != null && parent.getPath().startsWith(canonicalRoot.getPath())) {
-                android.system.Os.chmod(parent.getAbsolutePath(), 0755);
-                android.system.StructStat parentStat = android.system.Os.stat(parent.getAbsolutePath());
-                if ((parentStat.st_mode & 0111) == 0) {
-                    throw new IOException("目录缺少遍历权限: " + parent.getAbsolutePath());
-                }
-                if (parent.equals(canonicalRoot)) break;
-                parent = parent.getParentFile();
-            }
-
-            android.system.Os.chmod(canonicalTarget.getAbsolutePath(), 0755);
-            android.system.StructStat stat = android.system.Os.stat(canonicalTarget.getAbsolutePath());
-            log("exec-check " + relativePath + " mode=" + Integer.toOctalString(stat.st_mode)
+            android.system.StructStat stat = android.system.Os.stat(executable.getAbsolutePath());
+            log("native-exec-check " + name + " mode=" + Integer.toOctalString(stat.st_mode)
                     + " size=" + stat.st_size);
-            if ((stat.st_mode & 0111) == 0) {
-                throw new IOException("文件缺少执行权限: /" + relativePath);
-            }
         } catch (android.system.ErrnoException e) {
-            throw new IOException("无法修复运行环境执行权限: /" + relativePath, e);
+            throw new IOException("无法检查原生组件: " + name, e);
         }
     }
 
