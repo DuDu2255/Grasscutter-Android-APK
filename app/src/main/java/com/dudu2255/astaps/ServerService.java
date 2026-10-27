@@ -552,6 +552,8 @@ public class ServerService extends Service {
             }
             if (!Util.portOpen("127.0.0.1", 27017)) {
                 setStatus("启动数据库 MongoDB…");
+                ensureRootfsExecutable("opt/mongodb/bin/mongod");
+                ensureRootfsExecutable("lib/ld-linux-aarch64.so.1");
                 mongoProc = exec(prootCmd("-w", "/root",
                         "/opt/mongodb/bin/mongod",
                         "--dbpath", "/opt/astaps/data/db",
@@ -743,6 +745,42 @@ public class ServerService extends Service {
             }
         } catch (android.system.ErrnoException e) {
             throw new IOException("无法修复 proot 执行权限", e);
+        }
+    }
+
+    private void ensureRootfsExecutable(String relativePath) throws IOException {
+        File root = rootfs();
+        File target = new File(root, relativePath);
+        if (!target.exists() || !target.isFile()) {
+            throw new IOException("运行环境缺少可执行文件: /" + relativePath);
+        }
+        try {
+            File canonicalRoot = root.getCanonicalFile();
+            File canonicalTarget = target.getCanonicalFile();
+            if (!canonicalTarget.getPath().startsWith(canonicalRoot.getPath() + File.separator)) {
+                throw new IOException("运行环境可执行文件路径越界: /" + relativePath);
+            }
+
+            File parent = canonicalTarget.getParentFile();
+            while (parent != null && parent.getPath().startsWith(canonicalRoot.getPath())) {
+                android.system.Os.chmod(parent.getAbsolutePath(), 0755);
+                android.system.StructStat parentStat = android.system.Os.stat(parent.getAbsolutePath());
+                if ((parentStat.st_mode & 0111) == 0) {
+                    throw new IOException("目录缺少遍历权限: " + parent.getAbsolutePath());
+                }
+                if (parent.equals(canonicalRoot)) break;
+                parent = parent.getParentFile();
+            }
+
+            android.system.Os.chmod(canonicalTarget.getAbsolutePath(), 0755);
+            android.system.StructStat stat = android.system.Os.stat(canonicalTarget.getAbsolutePath());
+            log("exec-check " + relativePath + " mode=" + Integer.toOctalString(stat.st_mode)
+                    + " size=" + stat.st_size);
+            if ((stat.st_mode & 0111) == 0) {
+                throw new IOException("文件缺少执行权限: /" + relativePath);
+            }
+        } catch (android.system.ErrnoException e) {
+            throw new IOException("无法修复运行环境执行权限: /" + relativePath, e);
         }
     }
 
