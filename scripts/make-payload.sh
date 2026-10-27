@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 构建 APK 内嵌 payload：ubuntu 24.04 (arm64) + JRE21 + libcurl + MongoDB + grasscutter.jar
+# 构建 APK 内嵌 payload：ubuntu 24.04 (arm64) + JRE21 + libcurl + MongoDB。
+# Grasscutter JAR 由用户导入，不打进 APK 或运行环境包。
 # 用 docker + binfmt 构建 arm64 rootfs（比 chroot+qemu 稳）
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -52,12 +53,8 @@ test -x "$JNI_LIBS/libprootloader.so" && test -x "$JNI_LIBS/libmongod.so" \
   || fail "guest executable packaging failed"
 rm "$ROOTFS/opt/mongodb/bin/mongod"
 
-echo "== grasscutter.jar =="
+echo "== prepare runtime directories (JAR is imported by the user) =="
 mkdir -p "$ROOTFS/opt/astaps/data/db" "$ROOTFS/opt/astaps/resources" "$ROOTFS/opt/astaps/logs"
-curl -L --retry 3 -o "$WORK/grasscutter.jar" \
-  https://github.com/MeChen618/AstaPS/releases/latest/download/grasscutter.jar || fail "下载 grasscutter.jar 失败"
-test -s "$WORK/grasscutter.jar" || fail "grasscutter.jar 为空"
-cp "$WORK/grasscutter.jar" "$ROOTFS/opt/astaps/grasscutter.jar"
 printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$ROOTFS/etc/resolv.conf"
 
 echo "== payload =="

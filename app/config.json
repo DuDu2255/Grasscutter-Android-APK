@@ -181,6 +181,10 @@
           ]
         },
         "watermark": {
+          "enabled": true,
+          "text": "",
+          "color": "#9333EA",
+          "gradientTo": "#FF1493",
           "cmdId": 0,
           "payloadField": 0
         }
@@ -300,5 +304,5 @@
       "logRequests": "ALL"
     }
   },
-  "version": 18
+  "version": 19
 }

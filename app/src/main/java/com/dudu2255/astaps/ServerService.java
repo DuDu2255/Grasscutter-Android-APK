@@ -11,6 +11,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -383,6 +385,7 @@ public class ServerService extends Service {
                 Util.copy(in, master);
             }
         }
+        migrateWatermarkConfig(master);
         if (!serverDir().exists()) return;
 
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -396,6 +399,58 @@ public class ServerService extends Service {
         try (FileOutputStream os = new FileOutputStream(new File(serverDir(), "config.json"))) {
             os.write(json.getBytes("UTF-8"));
         }
+    }
+
+    /** Add watermark settings to configurations created by older APKs. */
+    private void migrateWatermarkConfig(File master) throws IOException {
+        final JSONObject config;
+        try (InputStream in = new FileInputStream(master)) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            config = new JSONObject(bos.toString("UTF-8"));
+        } catch (JSONException e) {
+            throw new IOException("config.json is not valid JSON", e);
+        }
+
+        try {
+            JSONObject server = childObject(config, "server");
+            JSONObject game = childObject(server, "game");
+            JSONObject gameOptions = childObject(game, "gameOptions");
+            JSONObject watermark = childObject(gameOptions, "watermark");
+            boolean changed = false;
+            changed |= putDefault(watermark, "enabled", true);
+            changed |= putDefault(watermark, "text", "");
+            changed |= putDefault(watermark, "color", "#9333EA");
+            changed |= putDefault(watermark, "gradientTo", "#FF1493");
+            if (config.optInt("version", 0) < 19) {
+                config.put("version", 19);
+                changed = true;
+            }
+            if (changed) {
+                try (FileOutputStream out = new FileOutputStream(master)) {
+                    out.write(config.toString(2).getBytes("UTF-8"));
+                }
+            }
+        } catch (JSONException e) {
+            throw new IOException("Unable to update watermark settings in config.json", e);
+        }
+    }
+
+    private static JSONObject childObject(JSONObject parent, String key) throws JSONException {
+        JSONObject child = parent.optJSONObject(key);
+        if (child == null) {
+            child = new JSONObject();
+            parent.put(key, child);
+        }
+        return child;
+    }
+
+    private static boolean putDefault(JSONObject object, String key, Object value) throws JSONException {
+        if (object.has(key)) return false;
+        object.put(key, value);
+        return true;
     }
 
     // ---------- 资源包 ----------
@@ -539,6 +594,13 @@ public class ServerService extends Service {
 
     private boolean runServerAttempt() throws Exception {
         if (stopRequested) return false;
+        if (!importedJar().isFile() || importedJar().length() == 0) {
+            if (jarFile().isFile() && !jarFile().delete()) {
+                log("Unable to remove the previous bundled Grasscutter JAR");
+            }
+            setStatus("请先导入匹配版本的 grasscutter.jar，再启动服务端");
+            return false;
+        }
         try {
             if (!new File(rootfs(), "usr").exists() || !new File(files(), "loader").exists()) {
                 if (!installPayload()) {
@@ -556,6 +618,10 @@ public class ServerService extends Service {
             }
             ensureConfig();
             applyImportedJar();
+            if (!jarFile().isFile() || jarFile().length() == 0) {
+                setStatus("请先导入匹配版本的 grasscutter.jar，再启动服务端");
+                return false;
+            }
             syncPlugins();
 
             if (!ensureResources()) {
