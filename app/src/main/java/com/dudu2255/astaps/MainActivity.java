@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -101,6 +102,12 @@ public class MainActivity extends Activity {
         LinearLayout row4 = new LinearLayout(this);
         root.addView(row4);
         row4.addView(button("后台运行设置", v -> openBackgroundSettings()));
+
+        Switch autostart = new Switch(this);
+        autostart.setText("开机自动启动服务器");
+        autostart.setChecked(Prefs.autostart(this));
+        autostart.setOnCheckedChangeListener((button, checked) -> Prefs.setAutostart(this, checked));
+        root.addView(autostart);
 
         LinearLayout logTabs = new LinearLayout(this);
         root.addView(logTabs);

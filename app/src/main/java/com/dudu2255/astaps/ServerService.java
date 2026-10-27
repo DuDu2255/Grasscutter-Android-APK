@@ -468,11 +468,55 @@ public class ServerService extends Service {
     private void runServer() {
         if (running) return;
         running = true;
+        int restartCount = 0;
+        try {
+            while (!stopRequested) {
+                long attemptStartedAt = android.os.SystemClock.elapsedRealtime();
+                boolean retry;
+                try {
+                    retry = runServerAttempt();
+                } catch (Exception e) {
+                    retry = !stopRequested;
+                    if (retry) {
+                        log("启动失败: " + e);
+                        setStatus("启动出错：" + e.getClass().getSimpleName() + " " + e.getMessage());
+                    }
+                }
+
+                stopProcesses();
+                if (!retry || stopRequested) break;
+                if (android.os.SystemClock.elapsedRealtime() - attemptStartedAt >= 30_000) {
+                    restartCount = 0;
+                }
+                if (restartCount >= 5) {
+                    setStatus("连续重启失败，请检查日志后手动重试");
+                    break;
+                }
+
+                long delaySeconds = Math.min(30, 2L << restartCount);
+                restartCount++;
+                setStatus("服务异常，" + delaySeconds + " 秒后自动重启（" + restartCount + "/5）");
+                Thread.sleep(delaySeconds * 1000);
+            }
+        } catch (InterruptedException e) {
+            if (!stopRequested) {
+                Thread.currentThread().interrupt();
+                log("服务监控线程被中断");
+            }
+        } finally {
+            running = false;
+            stopAll();
+            stopForeground(true);
+            stopSelf();
+        }
+    }
+
+    private boolean runServerAttempt() throws Exception {
+        if (stopRequested) return false;
         try {
             if (!new File(rootfs(), "usr").exists() || !new File(files(), "loader").exists()) {
                 if (!installPayload()) {
-                    running = false;
-                    return;
+                    return false;
                 }
             }
             if (!new File(files(), ".perms-ok").exists()) {
@@ -488,8 +532,7 @@ public class ServerService extends Service {
             syncPlugins();
 
             if (!ensureResources()) {
-                running = false;
-                return;
+                return false;
             }
 
             File log = logFile();
@@ -509,14 +552,13 @@ public class ServerService extends Service {
                         "--bind_ip", "127.0.0.1",
                         "--port", "27017", "--quiet"), mongoLog);
                 for (int i = 0; i < 90 && !Util.portOpen("127.0.0.1", 27017); i++) {
-                    if (stopRequested) return;
+                    if (stopRequested) return false;
                     if (!mongoProc.isAlive()) break;
                     Thread.sleep(1000);
                 }
                 if (!Util.portOpen("127.0.0.1", 27017)) {
                     setStatus("MongoDB 启动失败，请看日志");
-                    running = false;
-                    return;
+                    return true;
                 }
             }
 
@@ -532,7 +574,7 @@ public class ServerService extends Service {
             javaProc = exec(cmd, log);
 
             for (int i = 0; i < 180; i++) {
-                if (stopRequested) return;
+                if (stopRequested) return false;
                 if (!javaProc.isAlive()) break;
                 if (Util.portOpen("127.0.0.1", 10086)) break;
                 Thread.sleep(1000);
@@ -543,18 +585,21 @@ public class ServerService extends Service {
                 setStatus("服务端启动中…（首次加载资源较慢）");
             }
 
-            int code = javaProc.waitFor();
-            if (!stopRequested) setStatus("服务端已退出 (code " + code + ")，点启动重试");
-        } catch (Exception e) {
-            if (!stopRequested) {
-                log("启动失败: " + e);
-                setStatus("启动出错：" + e.getClass().getSimpleName() + " " + e.getMessage());
+            while (!stopRequested && javaProc.isAlive()) {
+                if (mongoProc != null && !mongoProc.isAlive()) {
+                    setStatus("MongoDB 已退出，准备重启服务");
+                    javaProc.destroy();
+                    break;
+                }
+                if (javaProc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) break;
             }
-        } finally {
-            running = false;
-            stopAll();
-            stopForeground(true);
-            stopSelf();
+            if (stopRequested) return false;
+            int code = javaProc.exitValue();
+            if (!stopRequested) setStatus("服务端已退出 (code " + code + ")，点启动重试");
+            return true;
+        } catch (InterruptedException e) {
+            if (stopRequested) return false;
+            throw e;
         }
     }
 
@@ -686,13 +731,17 @@ public class ServerService extends Service {
     }
 
     private void stopAll() {
+        stopProcesses();
+        running = false;
+        if (stopRequested) status = "已停止";
+        if (wake != null && wake.isHeld()) wake.release();
+    }
+
+    private void stopProcesses() {
         stopProcess(javaProc);
         stopProcess(mongoProc);
         javaProc = null;
         mongoProc = null;
-        running = false;
-        if (stopRequested) status = "已停止";
-        if (wake != null && wake.isHeld()) wake.release();
     }
 
     private void stopProcess(Process process) {
