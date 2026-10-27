@@ -8,7 +8,7 @@ ROOTFS=$WORK/rootfs
 rm -rf "$WORK"
 JNI_LIBS=$ROOT/app/src/main/jniLibs/arm64-v8a
 mkdir -p "$WORK" "$ROOT/app/src/main/assets" "$JNI_LIBS"
-rm -f "$JNI_LIBS/libmongod.so" "$JNI_LIBS/libldlinux.so" \
+rm -f "$JNI_LIBS/libprootloader.so" "$JNI_LIBS/libmongod.so" "$JNI_LIBS/libldlinux.so" \
   "$JNI_LIBS/libguestenv.so" "$JNI_LIBS/libguestjava.so"
 
 fail() { echo "::error::$*"; exit 1; }
@@ -39,13 +39,15 @@ tar -xzf "$WORK/mongo.tgz" -C "$ROOTFS/opt/mongodb" --strip-components=1
 test -x "$ROOTFS/opt/mongodb/bin/mongod" || fail "MongoDB 解压异常"
 
 echo "== package Android-executable guest programs =="
+cp "$ROOT/payload/loader" "$JNI_LIBS/libprootloader.so"
 cp "$ROOTFS/opt/mongodb/bin/mongod" "$JNI_LIBS/libmongod.so"
 cp -L "$ROOTFS/lib/ld-linux-aarch64.so.1" "$JNI_LIBS/libldlinux.so"
 cp "$ROOTFS/usr/bin/env" "$JNI_LIBS/libguestenv.so"
 cp "$ROOTFS/usr/lib/jvm/java-21-openjdk-arm64/bin/java" "$JNI_LIBS/libguestjava.so"
-chmod 755 "$JNI_LIBS/libmongod.so" "$JNI_LIBS/libldlinux.so" \
+chmod 755 "$JNI_LIBS/libprootloader.so" "$JNI_LIBS/libmongod.so" "$JNI_LIBS/libldlinux.so" \
   "$JNI_LIBS/libguestenv.so" "$JNI_LIBS/libguestjava.so"
-test -x "$JNI_LIBS/libmongod.so" && test -x "$JNI_LIBS/libldlinux.so" \
+test -x "$JNI_LIBS/libprootloader.so" && test -x "$JNI_LIBS/libmongod.so" \
+  && test -x "$JNI_LIBS/libldlinux.so" \
   && test -x "$JNI_LIBS/libguestenv.so" && test -x "$JNI_LIBS/libguestjava.so" \
   || fail "guest executable packaging failed"
 rm "$ROOTFS/opt/mongodb/bin/mongod"

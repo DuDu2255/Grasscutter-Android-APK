@@ -213,6 +213,11 @@ public class ServerService extends Service {
         return installedNative.isFile() ? installedNative : new File(files(), "proot");
     }
 
+    private File prootLoader() {
+        File installedNative = nativeGuestExecutable("libprootloader.so");
+        return installedNative.isFile() ? installedNative : new File(files(), "loader");
+    }
+
     private File nativeGuestExecutable(String name) {
         return new File(getApplicationInfo().nativeLibraryDir, name);
     }
@@ -459,7 +464,7 @@ public class ServerService extends Service {
         pb.environment().put("LD_PRELOAD", "");
         pb.environment().put("LD_LIBRARY_PATH", files().getAbsolutePath());
         pb.environment().put("PROOT_TMP_DIR", new File(files(), "tmp").getAbsolutePath());
-        pb.environment().put("PROOT_LOADER", new File(files(), "loader").getAbsolutePath());
+        pb.environment().put("PROOT_LOADER", prootLoader().getAbsolutePath());
         pb.environment().put("PROOT_LOADER_32", new File(files(), "loader32").getAbsolutePath());
         pb.environment().put("HOME", files().getAbsolutePath());
         pb.environment().put("TMPDIR", new File(files(), "tmp").getAbsolutePath());
@@ -761,6 +766,7 @@ public class ServerService extends Service {
             if (!proot.canExecute()) {
                 throw new IOException("系统禁止执行 proot 文件：" + proot.getAbsolutePath());
             }
+            ensureNativeGuestExecutable("libprootloader.so");
         } catch (android.system.ErrnoException e) {
             throw new IOException("无法修复 proot 执行权限", e);
         }
