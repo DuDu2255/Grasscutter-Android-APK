@@ -182,7 +182,7 @@
         },
         "watermark": {
           "enabled": true,
-          "text": "",
+          "text": "原神{uid}",
           "color": "#9333EA",
           "gradientTo": "#FF1493",
           "cmdId": 0,

@@ -67,6 +67,11 @@ public class ConfigActivity extends Activity {
 
     private String load() {
         File f = ServerService.masterConfig(this);
+        try {
+            ServerService.prepareMasterConfig(this);
+        } catch (Exception e) {
+            return "// 配置升级失败: " + e.getMessage();
+        }
         if (!f.exists()) return readAsset();
         try (InputStream in = new FileInputStream(f)) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();

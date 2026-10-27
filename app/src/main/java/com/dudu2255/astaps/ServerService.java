@@ -21,8 +21,12 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class ServerService extends Service {
 
@@ -286,15 +290,12 @@ public class ServerService extends Service {
             if (src.exists()) src.delete();
             if (!tmp.renameTo(src)) throw new IOException("保存失败");
 
-            File dst = new File(serverDir(), "Resources.zip");
-            if (dst.exists()) dst.delete();
-            if (serverDir().exists() && !src.renameTo(dst)) {
-                try (InputStream in = new FileInputStream(src)) {
-                    Util.copy(in, dst);
-                }
+            String configuredPath = getConfiguredResourcesPath(this);
+            if (serverDir().exists()) {
+                if (!ensureResources()) return;
+            } else {
+                setStatus("资源包已导入；启动时将按 " + configuredPath + " 自动处理");
             }
-            long size = dst.exists() ? dst.length() : src.length();
-            setStatus("资源包已就绪 " + (size / 1024 / 1024) + " MB（不解压，直接用 zip）");
         } catch (Exception e) {
             log("导入资源包失败: " + e);
             setStatus("导入资源失败：" + e.getClass().getSimpleName() + " " + e.getMessage());
@@ -380,12 +381,7 @@ public class ServerService extends Service {
 
     private void ensureConfig() throws IOException {
         File master = masterConfig(this);
-        if (!master.exists()) {
-            try (InputStream in = getAssets().open("config.default.json")) {
-                Util.copy(in, master);
-            }
-        }
-        migrateWatermarkConfig(master);
+        prepareMasterConfig(this);
         if (!serverDir().exists()) return;
 
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -394,15 +390,24 @@ public class ServerService extends Service {
             int n;
             while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
         }
-        String json = new String(bos.toByteArray(), "UTF-8")
-                .replace("\"./resources/\"", "\"./Resources.zip\"");
+        String json = new String(bos.toByteArray(), "UTF-8");
         try (FileOutputStream os = new FileOutputStream(new File(serverDir(), "config.json"))) {
             os.write(json.getBytes("UTF-8"));
         }
     }
 
+    public static void prepareMasterConfig(Context context) throws IOException {
+        File master = masterConfig(context);
+        if (!master.exists()) {
+            try (InputStream in = context.getAssets().open("config.default.json")) {
+                Util.copy(in, master);
+            }
+        }
+        migrateWatermarkConfig(master);
+    }
+
     /** Add watermark settings to configurations created by older APKs. */
-    private void migrateWatermarkConfig(File master) throws IOException {
+    private static void migrateWatermarkConfig(File master) throws IOException {
         final JSONObject config;
         try (InputStream in = new FileInputStream(master)) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -421,9 +426,19 @@ public class ServerService extends Service {
             JSONObject watermark = childObject(gameOptions, "watermark");
             boolean changed = false;
             changed |= putDefault(watermark, "enabled", true);
-            changed |= putDefault(watermark, "text", "");
+            changed |= putDefault(watermark, "text", "原神{uid}");
             changed |= putDefault(watermark, "color", "#9333EA");
             changed |= putDefault(watermark, "gradientTo", "#FF1493");
+            changed |= putDefault(watermark, "cmdId", 0);
+            changed |= putDefault(watermark, "payloadField", 0);
+            File watermarkTextMarker = new File(master.getParentFile(), ".watermark-default-text-v1");
+            boolean createWatermarkTextMarker = !watermarkTextMarker.exists();
+            if (createWatermarkTextMarker) {
+                if (watermark.optString("text", "").isBlank()) {
+                    watermark.put("text", "原神{uid}");
+                    changed = true;
+                }
+            }
             if (config.optInt("version", 0) < 19) {
                 config.put("version", 19);
                 changed = true;
@@ -432,6 +447,9 @@ public class ServerService extends Service {
                 try (FileOutputStream out = new FileOutputStream(master)) {
                     out.write(config.toString(2).getBytes("UTF-8"));
                 }
+            }
+            if (createWatermarkTextMarker && !watermarkTextMarker.createNewFile()) {
+                throw new IOException("Unable to mark the watermark text migration");
             }
         } catch (JSONException e) {
             throw new IOException("Unable to update watermark settings in config.json", e);
@@ -455,25 +473,184 @@ public class ServerService extends Service {
 
     // ---------- 资源包 ----------
 
-    /** 服务端原生支持把 resources 指到 zip，所以资源包保持压缩包形态，不解压 */
-    private boolean ensureResources() {
-        File src = new File(files(), "Resources.zip");
-        File dst = new File(serverDir(), "Resources.zip");
-        if (!dst.exists() && src.exists() && serverDir().exists()) {
-            if (!src.renameTo(dst)) {
-                try (InputStream in = new FileInputStream(src)) {
-                    Util.copy(in, dst);
-                } catch (Exception e) {
-                    log("放置 Resources.zip 失败: " + e);
-                }
-            }
+    public static String getConfiguredResourcesPath(Context context) throws IOException {
+        File master = masterConfig(context);
+        if (!master.isFile()) return "./Resources.zip";
+        try (InputStream in = new FileInputStream(master)) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = in.read(buffer)) > 0) bos.write(buffer, 0, count);
+            JSONObject config = new JSONObject(bos.toString("UTF-8"));
+            JSONObject folders = config.optJSONObject("folderStructure");
+            String path = folders == null ? "./Resources.zip" : folders.optString("resources", "./Resources.zip");
+            if (path.isBlank()) throw new IOException("folderStructure.resources is empty");
+            return path;
+        } catch (JSONException e) {
+            throw new IOException("Unable to read folderStructure.resources", e);
         }
-        long size = dst.exists() ? dst.length() : (src.exists() ? src.length() : 0);
-        if (size < 100L * 1024 * 1024) {
-            setStatus("还没有资源包 Resources.zip，先点「导入资源包」");
+    }
+
+    private File configuredResourcesTarget() throws IOException {
+        String configuredPath = getConfiguredResourcesPath(this).replace('\\', '/');
+        Path relative = Paths.get(configuredPath).normalize();
+        if (relative.isAbsolute() || relative.startsWith("..") || relative.toString().isBlank()) {
+            throw new IOException("folderStructure.resources must be a path inside the server folder");
+        }
+        File base = serverDir().getCanonicalFile();
+        File target = new File(base, relative.toString()).getCanonicalFile();
+        if (!target.toPath().startsWith(base.toPath()) || target.equals(base)) {
+            throw new IOException("folderStructure.resources must be a path inside the server folder");
+        }
+        return target;
+    }
+
+    private static boolean isZipPath(File path) {
+        return path.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".zip");
+    }
+
+    /** Keep ZIP inputs zipped when configured to a .zip path; otherwise extract into the configured folder. */
+    private boolean ensureResources() {
+        try {
+            File target = configuredResourcesTarget();
+            File importedZip = new File(files(), "Resources.zip");
+            File legacyZip = new File(serverDir(), "Resources.zip");
+            if (isZipPath(target)) {
+                File source = importedZip.isFile() ? importedZip : legacyZip;
+                if (source.isFile() && !source.equals(target)) {
+                    replaceFile(source, target);
+                }
+                if (!target.isFile() || target.length() < 100L * 1024 * 1024) {
+                    setStatus("还没有有效资源包 " + getConfiguredResourcesPath(this) + "，先点「导入资源包」");
+                    return false;
+                }
+                setStatus("ZIP 资源包已就绪：" + getConfiguredResourcesPath(this));
+                return true;
+            }
+
+            File sourceZip = importedZip.isFile() ? importedZip : legacyZip;
+            if (sourceZip.isFile()) {
+                if (sourceZip.length() < 100L * 1024 * 1024) {
+                    setStatus("资源包文件太小或不完整，请重新导入");
+                    return false;
+                }
+                extractZip(sourceZip, target);
+                if (importedZip.isFile()) importedZip.delete();
+                if (legacyZip.isFile()) legacyZip.delete();
+            }
+            File[] children = target.listFiles();
+            if (!target.isDirectory() || children == null || children.length == 0) {
+                setStatus("还没有资源目录 " + getConfiguredResourcesPath(this) + "，先点「导入资源包」");
+                return false;
+            }
+            setStatus("资源包已解压并整理到 " + getConfiguredResourcesPath(this));
+            return true;
+        } catch (Exception e) {
+            log("处理资源包失败: " + e);
+            setStatus("资源包处理失败：" + e.getMessage());
             return false;
         }
-        return true;
+    }
+
+    private static void replaceFile(File source, File target) throws IOException {
+        File parent = target.getParentFile();
+        if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("无法创建资源目录");
+        if (target.exists() && !target.delete()) throw new IOException("无法替换旧资源包");
+        if (!source.renameTo(target)) {
+            try (InputStream in = new FileInputStream(source)) {
+                Util.copy(in, target);
+            }
+            if (!source.delete()) source.deleteOnExit();
+        }
+    }
+
+    private void extractZip(File archive, File target) throws IOException {
+        File parent = target.getParentFile();
+        if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("无法创建资源目录");
+        File temp = new File(parent, "." + target.getName() + ".importing");
+        File backup = new File(parent, "." + target.getName() + ".previous");
+        deleteRecursively(temp);
+        deleteRecursively(backup);
+        if (!temp.mkdirs()) throw new IOException("无法创建临时解压目录");
+
+        boolean backedUp = false;
+        try {
+            long expandedBytes = 0;
+            int entries = 0;
+            String tempPath = temp.getCanonicalPath() + File.separator;
+            try (ZipInputStream zip = new ZipInputStream(new java.io.BufferedInputStream(new FileInputStream(archive)))) {
+                ZipEntry entry;
+                byte[] buffer = new byte[64 * 1024];
+                while ((entry = zip.getNextEntry()) != null) {
+                    if (++entries > 1_000_000) throw new IOException("资源包包含过多文件");
+                    String entryName = entry.getName().replace('\\', '/');
+                    Path relative = Paths.get(entryName).normalize();
+                    if (relative.isAbsolute() || relative.startsWith("..")) {
+                        throw new IOException("资源包包含非法路径");
+                    }
+                    if (relative.toString().isEmpty() || relative.toString().equals(".")) {
+                        zip.closeEntry();
+                        continue;
+                    }
+                    File output = new File(temp, relative.toString()).getCanonicalFile();
+                    if (!output.getPath().startsWith(tempPath)) throw new IOException("资源包包含非法路径");
+                    if (entry.isDirectory()) {
+                        if (!output.isDirectory() && !output.mkdirs()) throw new IOException("无法创建资源子目录");
+                    } else {
+                        File outputParent = output.getParentFile();
+                        if (!outputParent.isDirectory() && !outputParent.mkdirs()) {
+                            throw new IOException("无法创建资源子目录");
+                        }
+                        try (FileOutputStream out = new FileOutputStream(output)) {
+                            int count;
+                            while ((count = zip.read(buffer)) != -1) {
+                                expandedBytes += count;
+                                if (expandedBytes > 20L * 1024 * 1024 * 1024) {
+                                    throw new IOException("解压后的资源包超过 20 GB");
+                                }
+                                out.write(buffer, 0, count);
+                            }
+                        }
+                    }
+                    zip.closeEntry();
+                }
+            }
+
+            File[] children = temp.listFiles();
+            if (children == null || children.length == 0) throw new IOException("资源压缩包为空");
+            File content = children.length == 1 && children[0].isDirectory()
+                    ? children[0] : temp;
+            if (content == temp) {
+                File[] meaningful = java.util.Arrays.stream(children)
+                        .filter(file -> !file.getName().equals("__MACOSX") && !file.getName().equals(".DS_Store"))
+                        .toArray(File[]::new);
+                if (meaningful.length == 1 && meaningful[0].isDirectory()) content = meaningful[0];
+            }
+
+            if (target.exists()) {
+                if (!target.renameTo(backup)) throw new IOException("无法备份旧资源目录");
+                backedUp = true;
+            }
+            if (!content.renameTo(target)) throw new IOException("无法将解压目录整理为配置指定的名称");
+            deleteRecursively(temp);
+            deleteRecursively(backup);
+        } catch (IOException | RuntimeException e) {
+            if (target.exists() && backedUp) deleteRecursively(target);
+            if (backedUp && backup.exists()) backup.renameTo(target);
+            deleteRecursively(temp);
+            throw e;
+        }
+    }
+
+    private static void deleteRecursively(File file) throws IOException {
+        if (!file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) deleteRecursively(child);
+            }
+        }
+        if (file.exists() && !file.delete()) throw new IOException("无法删除 " + file.getName());
     }
 
     // ---------- 运行 ----------

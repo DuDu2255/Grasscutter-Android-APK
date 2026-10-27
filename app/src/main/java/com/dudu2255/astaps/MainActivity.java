@@ -222,8 +222,16 @@ public class MainActivity extends Activity {
         File imported = new File(files, "import/grasscutter.jar");
         File config = ServerService.masterConfig(this);
         File resZip = new File(files, "Resources.zip");
-        File resZip2 = new File(files, "rootfs/opt/astaps/Resources.zip");
-        long resSize = resZip.exists() ? resZip.length() : (resZip2.exists() ? resZip2.length() : 0);
+        File serverDir = new File(files, "rootfs/opt/astaps");
+        String resourcesPath;
+        try {
+            resourcesPath = ServerService.getConfiguredResourcesPath(this);
+        } catch (Exception e) {
+            resourcesPath = "./Resources.zip";
+        }
+        File configuredResources = new File(serverDir, resourcesPath);
+        File resourceDir = configuredResources.isDirectory() ? configuredResources : null;
+        File resourceZip = configuredResources.isFile() ? configuredResources : resZip;
 
         StringBuilder info = new StringBuilder();
         info.append("jar: ").append(jar.exists()
@@ -233,8 +241,17 @@ public class MainActivity extends Activity {
         }
         info.append("\n配置: ").append(config.exists() ? "可编辑" : "默认");
         info.append("\n插件: ").append(Util.dirCount(new File(files, "plugins"))).append(" 个");
-        info.append("\n资源包: ").append(resSize > 0
-                ? (resSize / 1024 / 1024) + " MB (Resources.zip)" : "未导入");
+        info.append("\n资源包: ");
+        if (resourceDir != null) {
+            File[] entries = resourceDir.listFiles();
+            info.append("已解压到 ").append(resourcesPath)
+                    .append(entries == null ? "" : "（" + entries.length + " 项）");
+        } else if (configuredResources.isFile() || resZip.isFile()) {
+            info.append(resourceZip.length() / 1024 / 1024).append(" MB (")
+                    .append(resourcesPath).append(")");
+        } else {
+            info.append("未导入");
+        }
         infoView.setText(info.toString());
 
         refreshLog();
