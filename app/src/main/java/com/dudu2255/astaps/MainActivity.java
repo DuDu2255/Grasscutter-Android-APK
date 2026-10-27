@@ -45,10 +45,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 2001);
+        }
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(48, 72, 48, 32);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(48, 72 + insets.getSystemWindowInsetTop(),
+                    48, 32 + insets.getSystemWindowInsetBottom());
+            return insets;
+        });
 
         TextView title = new TextView(this);
         title.setText("AstaPS 服务器 (原神 7.1)");

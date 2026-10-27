@@ -1,6 +1,6 @@
 # AstaPS Android APK
 
-把 AstaPS（原神 7.1 私服）打包成一个**不需要 Termux** 的安卓 App，后台以常驻通知服务运行。
+把 AstaPS（原神 7.1 私服）打包成一个**不需要 Termux** 的安卓 App，兼容 Android 8.0 至 Android 16，后台以常驻通知服务运行。
 
 ## 界面
 - **启动 / 停止**：拉起 proot 内的 MongoDB + 服务端（dispatch 10086 / 网关 22101）

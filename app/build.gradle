@@ -2,14 +2,14 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'com.dudu2255.astaps'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.dudu2255.astaps"
         minSdk 26
-        targetSdk 28
-        versionCode 1
-        versionName "1.0"
+        targetSdk 36
+        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '2').toInteger()
+        versionName "1.0.${System.getenv('GITHUB_RUN_NUMBER') ?: '2'}"
     }
 
     compileOptions {

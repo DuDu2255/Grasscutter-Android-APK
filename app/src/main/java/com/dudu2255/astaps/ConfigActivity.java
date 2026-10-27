@@ -27,6 +27,11 @@ public class ConfigActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(32, 56, 32, 24);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(32, 56 + insets.getSystemWindowInsetTop(),
+                    32, 24 + insets.getSystemWindowInsetBottom());
+            return insets;
+        });
 
         TextView tip = new TextView(this);
         tip.setText("config.json（dispatch 端口 10086 / 网关 22101，改完点保存，重启服务生效）");
