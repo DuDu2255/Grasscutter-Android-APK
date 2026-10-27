@@ -1,0 +1,293 @@
+== enable arm64 binfmt ==
+Unable to find image 'tonistiigi/binfmt:latest' locally
+latest: Pulling from tonistiigi/binfmt
+56685a25fbf3: Pulling fs layer
+0c46aa6e9c41: Pulling fs layer
+0c46aa6e9c41: Verifying Checksum
+0c46aa6e9c41: Download complete
+56685a25fbf3: Download complete
+56685a25fbf3: Pull complete
+0c46aa6e9c41: Pull complete
+Digest: sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+Status: Downloaded newer image for tonistiigi/binfmt:latest
+installing: arm64 OK
+{
+  "supported": [
+    "linux/amd64",
+    "linux/amd64/v2",
+    "linux/amd64/v3",
+    "linux/amd64/v4",
+    "linux/arm64",
+    "linux/386"
+  ],
+  "emulators": [
+    "llvm-16-runtime.binfmt",
+    "llvm-17-runtime.binfmt",
+    "llvm-18-runtime.binfmt",
+    "python3.12",
+    "qemu-aarch64"
+  ]
+}
+== build arm64 rootfs ==
+Unable to find image 'ubuntu:24.04' locally
+24.04: Pulling from library/ubuntu
+d5aec63251bb: Pulling fs layer
+d5aec63251bb: Verifying Checksum
+d5aec63251bb: Download complete
+d5aec63251bb: Pull complete
+Digest: sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+Status: Downloaded newer image for ubuntu:24.04
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package openssl.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 4376 files and directories currently installed.)
+Preparing to unpack .../00-openssl_3.0.13-0ubuntu3.16_arm64.deb ...
+Unpacking openssl (3.0.13-0ubuntu3.16) ...
+Selecting previously unselected package ca-certificates.
+Preparing to unpack .../01-ca-certificates_20260816ubuntu0.24.04.1_all.deb ...
+Unpacking ca-certificates (20260816ubuntu0.24.04.1) ...
+Selecting previously unselected package libkrb5support0:arm64.
+Preparing to unpack .../02-libkrb5support0_1.20.1-6ubuntu2.10_arm64.deb ...
+Unpacking libkrb5support0:arm64 (1.20.1-6ubuntu2.10) ...
+Selecting previously unselected package libk5crypto3:arm64.
+Preparing to unpack .../03-libk5crypto3_1.20.1-6ubuntu2.10_arm64.deb ...
+Unpacking libk5crypto3:arm64 (1.20.1-6ubuntu2.10) ...
+Selecting previously unselected package libkeyutils1:arm64.
+Preparing to unpack .../04-libkeyutils1_1.6.3-3build1_arm64.deb ...
+Unpacking libkeyutils1:arm64 (1.6.3-3build1) ...
+Selecting previously unselected package libkrb5-3:arm64.
+Preparing to unpack .../05-libkrb5-3_1.20.1-6ubuntu2.10_arm64.deb ...
+Unpacking libkrb5-3:arm64 (1.20.1-6ubuntu2.10) ...
+Selecting previously unselected package libgssapi-krb5-2:arm64.
+Preparing to unpack .../06-libgssapi-krb5-2_1.20.1-6ubuntu2.10_arm64.deb ...
+Unpacking libgssapi-krb5-2:arm64 (1.20.1-6ubuntu2.10) ...
+Selecting previously unselected package libsqlite3-0:arm64.
+Preparing to unpack .../07-libsqlite3-0_3.45.1-1ubuntu2.8_arm64.deb ...
+Unpacking libsqlite3-0:arm64 (3.45.1-1ubuntu2.8) ...
+Selecting previously unselected package libnghttp2-14:arm64.
+Preparing to unpack .../08-libnghttp2-14_1.59.0-1ubuntu0.4_arm64.deb ...
+Unpacking libnghttp2-14:arm64 (1.59.0-1ubuntu0.4) ...
+Selecting previously unselected package libpsl5t64:arm64.
+Preparing to unpack .../09-libpsl5t64_0.21.2-1.1build1_arm64.deb ...
+Unpacking libpsl5t64:arm64 (0.21.2-1.1build1) ...
+Selecting previously unselected package ca-certificates-java.
+Preparing to unpack .../10-ca-certificates-java_20240118_all.deb ...
+Unpacking ca-certificates-java (20240118) ...
+Selecting previously unselected package java-common.
+Preparing to unpack .../11-java-common_0.75+exp1_all.deb ...
+Unpacking java-common (0.75+exp1) ...
+Selecting previously unselected package libbrotli1:arm64.
+Preparing to unpack .../12-libbrotli1_1.1.0-2ubuntu0.1_arm64.deb ...
+Unpacking libbrotli1:arm64 (1.1.0-2ubuntu0.1) ...
+Selecting previously unselected package libsasl2-modules-db:arm64.
+Preparing to unpack .../13-libsasl2-modules-db_2.1.28+dfsg1-5ubuntu3.1_arm64.deb ...
+Unpacking libsasl2-modules-db:arm64 (2.1.28+dfsg1-5ubuntu3.1) ...
+Selecting previously unselected package libsasl2-2:arm64.
+Preparing to unpack .../14-libsasl2-2_2.1.28+dfsg1-5ubuntu3.1_arm64.deb ...
+Unpacking libsasl2-2:arm64 (2.1.28+dfsg1-5ubuntu3.1) ...
+Selecting previously unselected package libldap2:arm64.
+Preparing to unpack .../15-libldap2_2.6.10+dfsg-0ubuntu0.24.04.1_arm64.deb ...
+Unpacking libldap2:arm64 (2.6.10+dfsg-0ubuntu0.24.04.1) ...
+Selecting previously unselected package librtmp1:arm64.
+Preparing to unpack .../16-librtmp1_2.4+20151223.gitfa8646d.1-2build7_arm64.deb ...
+Unpacking librtmp1:arm64 (2.4+20151223.gitfa8646d.1-2build7) ...
+Selecting previously unselected package libssh-4:arm64.
+Preparing to unpack .../17-libssh-4_0.10.6-2ubuntu0.5_arm64.deb ...
+Unpacking libssh-4:arm64 (0.10.6-2ubuntu0.5) ...
+Selecting previously unselected package libcurl4t64:arm64.
+Preparing to unpack .../18-libcurl4t64_8.5.0-2ubuntu10.16_arm64.deb ...
+Unpacking libcurl4t64:arm64 (8.5.0-2ubuntu10.16) ...
+Selecting previously unselected package libjpeg-turbo8:arm64.
+Preparing to unpack .../19-libjpeg-turbo8_2.1.5-2ubuntu2_arm64.deb ...
+Unpacking libjpeg-turbo8:arm64 (2.1.5-2ubuntu2) ...
+Selecting previously unselected package libjpeg8:arm64.
+Preparing to unpack .../20-libjpeg8_8c-2ubuntu11_arm64.deb ...
+Unpacking libjpeg8:arm64 (8c-2ubuntu11) ...
+Selecting previously unselected package liblcms2-2:arm64.
+Preparing to unpack .../21-liblcms2-2_2.14-2ubuntu0.1_arm64.deb ...
+Unpacking liblcms2-2:arm64 (2.14-2ubuntu0.1) ...
+Selecting previously unselected package libnspr4:arm64.
+Preparing to unpack .../22-libnspr4_2%3a4.35-1.1build1_arm64.deb ...
+Unpacking libnspr4:arm64 (2:4.35-1.1build1) ...
+Selecting previously unselected package libnss3:arm64.
+Preparing to unpack .../23-libnss3_2%3a3.98-1ubuntu0.3_arm64.deb ...
+Unpacking libnss3:arm64 (2:3.98-1ubuntu0.3) ...
+Selecting previously unselected package libpcsclite1:arm64.
+Preparing to unpack .../24-libpcsclite1_2.0.3-1build1_arm64.deb ...
+Unpacking libpcsclite1:arm64 (2.0.3-1build1) ...
+Selecting previously unselected package openjdk-21-jre-headless:arm64.
+Preparing to unpack .../25-openjdk-21-jre-headless_21.0.12.1+1-1~24.04.4_arm64.deb ...
+Unpacking openjdk-21-jre-headless:arm64 (21.0.12.1+1-1~24.04.4) ...
+Setting up liblcms2-2:arm64 (2.14-2ubuntu0.1) ...
+Setting up libkeyutils1:arm64 (1.6.3-3build1) ...
+Setting up java-common (0.75+exp1) ...
+Setting up libbrotli1:arm64 (1.1.0-2ubuntu0.1) ...
+Setting up libsqlite3-0:arm64 (3.45.1-1ubuntu2.8) ...
+Setting up libpsl5t64:arm64 (0.21.2-1.1build1) ...
+Setting up libnghttp2-14:arm64 (1.59.0-1ubuntu0.4) ...
+Setting up libkrb5support0:arm64 (1.20.1-6ubuntu2.10) ...
+Setting up libsasl2-modules-db:arm64 (2.1.28+dfsg1-5ubuntu3.1) ...
+Setting up libnspr4:arm64 (2:4.35-1.1build1) ...
+Setting up librtmp1:arm64 (2.4+20151223.gitfa8646d.1-2build7) ...
+Setting up libpcsclite1:arm64 (2.0.3-1build1) ...
+Setting up libk5crypto3:arm64 (1.20.1-6ubuntu2.10) ...
+Setting up libjpeg-turbo8:arm64 (2.1.5-2ubuntu2) ...
+Setting up libsasl2-2:arm64 (2.1.28+dfsg1-5ubuntu3.1) ...
+Setting up libkrb5-3:arm64 (1.20.1-6ubuntu2.10) ...
+Setting up openssl (3.0.13-0ubuntu3.16) ...
+Setting up libldap2:arm64 (2.6.10+dfsg-0ubuntu0.24.04.1) ...
+Setting up libjpeg8:arm64 (8c-2ubuntu11) ...
+Setting up libnss3:arm64 (2:3.98-1ubuntu0.3) ...
+Setting up ca-certificates (20260816ubuntu0.24.04.1) ...
+Updating certificates in /etc/ssl/certs...
+120 added, 0 removed; done.
+Setting up libgssapi-krb5-2:arm64 (1.20.1-6ubuntu2.10) ...
+Setting up libssh-4:arm64 (0.10.6-2ubuntu0.5) ...
+Setting up ca-certificates-java (20240118) ...
+No JRE found. Skipping Java certificates setup.
+Setting up openjdk-21-jre-headless:arm64 (21.0.12.1+1-1~24.04.4) ...
+update-alternatives: using /usr/lib/jvm/java-21-openjdk-arm64/bin/java to provide /usr/bin/java (java) in auto mode
+update-alternatives: using /usr/lib/jvm/java-21-openjdk-arm64/bin/jpackage to provide /usr/bin/jpackage (jpackage) in auto mode
+update-alternatives: using /usr/lib/jvm/java-21-openjdk-arm64/bin/keytool to provide /usr/bin/keytool (keytool) in auto mode
+update-alternatives: using /usr/lib/jvm/java-21-openjdk-arm64/bin/rmiregistry to provide /usr/bin/rmiregistry (rmiregistry) in auto mode
+update-alternatives: using /usr/lib/jvm/java-21-openjdk-arm64/lib/jexec to provide /usr/bin/jexec (jexec) in auto mode
+Setting up libcurl4t64:arm64 (8.5.0-2ubuntu10.16) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+Processing triggers for ca-certificates (20260816ubuntu0.24.04.1) ...
+Updating certificates in /etc/ssl/certs...
+0 added, 0 removed; done.
+Running hooks in /etc/ca-certificates/update.d...
+done.
+Processing triggers for ca-certificates-java (20240118) ...
+Adding debian:ACCVRAIZ1.pem
+Adding debian:AC_RAIZ_FNMT-RCM.pem
+Adding debian:AC_RAIZ_FNMT-RCM_SERVIDORES_SEGUROS.pem
+Adding debian:ANF_Secure_Server_Root_CA.pem
+Adding debian:Actalis_Authentication_Root_CA.pem
+Adding debian:Amazon_Root_CA_1.pem
+Adding debian:Amazon_Root_CA_2.pem
+Adding debian:Amazon_Root_CA_3.pem
+Adding debian:Amazon_Root_CA_4.pem
+Adding debian:Atos_TrustedRoot_Root_CA_ECC_TLS_2021.pem
+Adding debian:Atos_TrustedRoot_Root_CA_RSA_TLS_2021.pem
+Adding debian:Autoridad_de_Certificacion_Firmaprofesional_CIF_A62634068.pem
+Adding debian:BJCA_Global_Root_CA1.pem
+Adding debian:BJCA_Global_Root_CA2.pem
+Adding debian:Buypass_Class_2_Root_CA.pem
+Adding debian:Buypass_Class_3_Root_CA.pem
+Adding debian:CA_Disig_Root_R2.pem
+Adding debian:CFCA_EV_ROOT.pem
+Adding debian:COMODO_ECC_Certification_Authority.pem
+Adding debian:COMODO_RSA_Certification_Authority.pem
+Adding debian:Certainly_Root_E1.pem
+Adding debian:Certainly_Root_R1.pem
+Adding debian:Certigna_Root_CA.pem
+Adding debian:Certum_EC-384_CA.pem
+Adding debian:Certum_Trusted_Network_CA.pem
+Adding debian:Certum_Trusted_Network_CA_2.pem
+Adding debian:Certum_Trusted_Root_CA.pem
+Adding debian:D-TRUST_BR_Root_CA_1_2020.pem
+Adding debian:D-TRUST_BR_Root_CA_2_2023.pem
+Adding debian:D-TRUST_EV_Root_CA_1_2020.pem
+Adding debian:D-TRUST_EV_Root_CA_2_2023.pem
+Adding debian:D-TRUST_Root_Class_3_CA_2_2009.pem
+Adding debian:D-TRUST_Root_Class_3_CA_2_EV_2009.pem
+Adding debian:DigiCert_Assured_ID_Root_G2.pem
+Adding debian:DigiCert_Assured_ID_Root_G3.pem
+Adding debian:DigiCert_Global_Root_G2.pem
+Adding debian:DigiCert_Global_Root_G3.pem
+Adding debian:DigiCert_TLS_ECC_P384_Root_G5.pem
+Adding debian:DigiCert_TLS_RSA4096_Root_G5.pem
+Adding debian:DigiCert_Trusted_Root_G4.pem
+Adding debian:GDCA_TrustAUTH_R5_ROOT.pem
+Adding debian:GTS_Root_R1.pem
+Adding debian:GTS_Root_R3.pem
+Adding debian:GTS_Root_R4.pem
+Adding debian:GlobalSign_ECC_Root_CA_-_R4.pem
+Adding debian:GlobalSign_ECC_Root_CA_-_R5.pem
+Adding debian:GlobalSign_Root_CA_-_R3.pem
+Adding debian:GlobalSign_Root_CA_-_R6.pem
+Adding debian:GlobalSign_Root_E46.pem
+Adding debian:GlobalSign_Root_R46.pem
+Adding debian:Go_Daddy_Root_Certificate_Authority_-_G2.pem
+Adding debian:HARICA_TLS_ECC_Root_CA_2021.pem
+Adding debian:HARICA_TLS_RSA_Root_CA_2021.pem
+Adding debian:Hellenic_Academic_and_Research_Institutions_ECC_RootCA_2015.pem
+Adding debian:Hellenic_Academic_and_Research_Institutions_RootCA_2015.pem
+Adding debian:HiPKI_Root_CA_-_G1.pem
+Adding debian:Hongkong_Post_Root_CA_3.pem
+Adding debian:ISRG_Root_X1.pem
+Adding debian:ISRG_Root_X2.pem
+Adding debian:IdenTrust_Commercial_Root_CA_1.pem
+Adding debian:IdenTrust_Public_Sector_Root_CA_1.pem
+Adding debian:Izenpe.com.pem
+Adding debian:Microsec_e-Szigno_Root_CA_2009.pem
+Adding debian:Microsoft_ECC_Root_Certificate_Authority_2017.pem
+Adding debian:Microsoft_RSA_Root_Certificate_Authority_2017.pem
+Adding debian:NAVER_Global_Root_Certification_Authority.pem
+Adding debian:NetLock_Arany_=Class_Gold=_Főtanúsítvány.pem
+Adding debian:OISTE_Server_Root_ECC_G1.pem
+Adding debian:OISTE_Server_Root_RSA_G1.pem
+Adding debian:OISTE_WISeKey_Global_Root_GB_CA.pem
+Adding debian:OISTE_WISeKey_Global_Root_GC_CA.pem
+Adding debian:QuoVadis_Root_CA_1_G3.pem
+Adding debian:QuoVadis_Root_CA_2_G3.pem
+Adding debian:QuoVadis_Root_CA_3_G3.pem
+Adding debian:SECOM_TLS_ECC_Root_CA_2024.pem
+Adding debian:SECOM_TLS_RSA_Root_CA_2024.pem
+Adding debian:SSL.com_EV_Root_Certification_Authority_ECC.pem
+Adding debian:SSL.com_EV_Root_Certification_Authority_RSA_R2.pem
+Adding debian:SSL.com_Root_Certification_Authority_ECC.pem
+Adding debian:SSL.com_Root_Certification_Authority_RSA.pem
+Adding debian:SSL.com_TLS_ECC_Root_CA_2022.pem
+Adding debian:SSL.com_TLS_RSA_Root_CA_2022.pem
+Adding debian:SZAFIR_ROOT_CA2.pem
+Adding debian:Sectigo_Public_Server_Authentication_Root_E46.pem
+Adding debian:Sectigo_Public_Server_Authentication_Root_R46.pem
+Adding debian:SecureSign_Root_CA14.pem
+Adding debian:SecureSign_Root_CA15.pem
+Adding debian:Security_Communication_ECC_RootCA1.pem
+Adding debian:Security_Communication_RootCA2.pem
+Adding debian:Starfield_Root_Certificate_Authority_-_G2.pem
+Adding debian:Starfield_Services_Root_Certificate_Authority_-_G2.pem
+Adding debian:SwissSign_RSA_TLS_Root_CA_2022_-_1.pem
+Adding debian:T-TeleSec_GlobalRoot_Class_2.pem
+Adding debian:T-TeleSec_GlobalRoot_Class_3.pem
+Adding debian:TUBITAK_Kamu_SM_SSL_Kok_Sertifikasi_-_Surum_1.pem
+Adding debian:TWCA_CYBER_Root_CA.pem
+Adding debian:TWCA_Global_Root_CA.pem
+Adding debian:TWCA_Root_Certification_Authority.pem
+Adding debian:Telekom_Security_TLS_ECC_Root_2020.pem
+Adding debian:Telekom_Security_TLS_RSA_Root_2023.pem
+Adding debian:Telia_EC_TLS_Root_CA_v3.pem
+Adding debian:Telia_RSA_TLS_Root_CA_v3.pem
+Adding debian:Telia_Root_CA_v2.pem
+Adding debian:TrustAsia_Global_Root_CA_G3.pem
+Adding debian:TrustAsia_Global_Root_CA_G4.pem
+Adding debian:TrustAsia_TLS_ECC_Root_CA.pem
+Adding debian:TrustAsia_TLS_RSA_Root_CA.pem
+Adding debian:TunTrust_Root_CA.pem
+Adding debian:UCA_Extended_Validation_Root.pem
+Adding debian:UCA_Global_G2_Root.pem
+Adding debian:USERTrust_ECC_Certification_Authority.pem
+Adding debian:USERTrust_RSA_Certification_Authority.pem
+Adding debian:certSIGN_Root_CA_G2.pem
+Adding debian:e-Szigno_Root_CA_2017.pem
+Adding debian:e-Szigno_TLS_Root_CA_2023.pem
+Adding debian:emSign_ECC_Root_CA_-_C3.pem
+Adding debian:emSign_Root_CA_-_C1.pem
+Adding debian:emSign_Root_CA_-_G1.pem
+Adding debian:vTrus_ECC_Root_CA.pem
+Adding debian:vTrus_Root_CA.pem
+done.
+== MongoDB 7.0 ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0 29 76.0M   29 22.3M    0     0  57.6M      0  0:00:01 --:--:--  0:00:01 57.5M100 76.0M  100 76.0M    0     0   139M      0 --:--:-- --:--:-- --:--:--  139M
+== grasscutter.jar ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+ 54 82.7M   54 45.4M    0     0  36.9M      0  0:00:02  0:00:01  0:00:01 36.9M100 82.7M  100 82.7M    0     0  43.4M      0  0:00:01  0:00:01 --:--:-- 55.1M
+== payload ==
+-rw-r--r-- 1 runner runner 249M Oct 27 00:27 /home/runner/work/Grasscutter-Android-APK/Grasscutter-Android-APK/app/src/main/assets/payload.bin
