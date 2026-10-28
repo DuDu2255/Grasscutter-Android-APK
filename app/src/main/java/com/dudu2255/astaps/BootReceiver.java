@@ -7,8 +7,12 @@ import android.content.Intent;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())
-                && Prefs.autostart(context)) {
+        String action = intent == null ? null : intent.getAction();
+        boolean boot = Intent.ACTION_BOOT_COMPLETED.equals(action)
+                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)
+                || "com.htc.intent.action.QUICKBOOT_POWERON".equals(action)
+                || "android.intent.action.QUICKBOOT_POWERON".equals(action);
+        if (boot && (Prefs.autostart(context) || Prefs.serverWanted(context))) {
             ServerService.start(context);
         }
     }

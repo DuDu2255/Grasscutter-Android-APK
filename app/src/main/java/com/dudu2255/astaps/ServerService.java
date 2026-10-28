@@ -3,6 +3,7 @@ package com.dudu2255.astaps;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.pm.ServiceInfo;
 import android.content.Context;
@@ -10,6 +11,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -47,6 +50,7 @@ public class ServerService extends Service {
 
     public static volatile String status = "未启动";
     public static volatile boolean running = false;
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     private PowerManager.WakeLock wake;
     private Process mongoProc;
@@ -56,10 +60,12 @@ public class ServerService extends Service {
     private int activeImports;
 
     public static void start(Context c) {
+        Prefs.setServerWanted(c, true);
         send(c, new Intent(c, ServerService.class).setAction(ACTION_START));
     }
 
     public static void stop(Context c) {
+        Prefs.setServerWanted(c, false);
         send(c, new Intent(c, ServerService.class).setAction(ACTION_STOP));
     }
 
@@ -108,9 +114,18 @@ public class ServerService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL)
                 : new Notification.Builder(this);
+        Intent openApp = new Intent(this, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                this, 0, openApp,
+                Build.VERSION.SDK_INT >= 23
+                        ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                        : PendingIntent.FLAG_UPDATE_CURRENT);
         b.setContentTitle("Grasscutter Android 服务器")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
+                .setContentIntent(contentIntent)
+                .setCategory(Notification.CATEGORY_SERVICE)
                 .setOngoing(true);
         return b.build();
     }
@@ -125,7 +140,7 @@ public class ServerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String action = intent == null ? ACTION_START : intent.getAction();
+        String action = intent == null ? null : intent.getAction();
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIF_ID, buildNotif(status),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
@@ -134,7 +149,16 @@ public class ServerService extends Service {
         }
         if (!wake.isHeld()) wake.acquire();
 
+        if (intent == null && !Prefs.serverWanted(this)) {
+            if (wake.isHeld()) wake.release();
+            stopForeground(true);
+            stopSelfResult(startId);
+            return START_NOT_STICKY;
+        }
+        if (action == null) action = ACTION_START;
+
         if (ACTION_STOP.equals(action)) {
+            Prefs.setServerWanted(this, false);
             stopRequested = true;
             Thread activeWorker = worker;
             if (activeWorker != null) activeWorker.interrupt();
@@ -165,10 +189,17 @@ public class ServerService extends Service {
                         && (worker == null || !worker.isAlive());
             }
             if (idle) {
-                if (wake != null && wake.isHeld()) wake.release();
-                stopForeground(true);
-                stopSelfResult(startId);
-                return START_NOT_STICKY;
+                if (Prefs.serverWanted(this)) {
+                    stopRequested = false;
+                    worker = new Thread(this::runServer, "astaps-server");
+                    worker.start();
+                    return START_STICKY;
+                } else {
+                    if (wake != null && wake.isHeld()) wake.release();
+                    stopForeground(true);
+                    stopSelfResult(startId);
+                    return START_NOT_STICKY;
+                }
             }
             return START_STICKY;
         }
@@ -757,7 +788,7 @@ public class ServerService extends Service {
         running = true;
         int restartCount = 0;
         try {
-            while (!stopRequested) {
+            while (!stopRequested && Prefs.serverWanted(this)) {
                 long attemptStartedAt = android.os.SystemClock.elapsedRealtime();
                 boolean retry;
                 try {
@@ -771,18 +802,16 @@ public class ServerService extends Service {
                 }
 
                 stopProcesses();
-                if (!retry || stopRequested) break;
+                if (!retry || stopRequested) {
+                    if (!stopRequested) Prefs.setServerWanted(this, false);
+                    break;
+                }
                 if (android.os.SystemClock.elapsedRealtime() - attemptStartedAt >= 30_000) {
                     restartCount = 0;
                 }
-                if (restartCount >= 5) {
-                    setStatus("连续重启失败，请检查日志后手动重试");
-                    break;
-                }
-
-                long delaySeconds = Math.min(30, 2L << restartCount);
+                long delaySeconds = Math.min(300, 2L << Math.min(restartCount, 8));
                 restartCount++;
-                setStatus("服务异常，" + delaySeconds + " 秒后自动重启（" + restartCount + "/5）");
+                setStatus("服务异常，" + delaySeconds + " 秒后自动重启（第 " + restartCount + " 次）");
                 Thread.sleep(delaySeconds * 1000);
             }
         } catch (InterruptedException e) {
@@ -792,10 +821,31 @@ public class ServerService extends Service {
             }
         } finally {
             running = false;
-            stopAll();
-            stopForeground(true);
-            stopSelf();
+            stopProcesses();
+            if (!Prefs.serverWanted(this) || stopRequested) {
+                stopAll();
+                stopForeground(true);
+                stopSelf();
+            } else {
+                setStatus("服务监控意外退出，正在恢复…");
+                if (wake != null && wake.isHeld()) wake.release();
+                MAIN_HANDLER.postDelayed(() -> {
+                    if (Prefs.serverWanted(getApplicationContext())) {
+                        ServerService.start(getApplicationContext());
+                    }
+                }, 1000);
+            }
         }
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        if (!Prefs.serverWanted(this)) return;
+        // Keep the user-started foreground server alive when the launcher task is swiped away.
+        MAIN_HANDLER.postDelayed(() -> {
+            if (Prefs.serverWanted(ServerService.this)) ServerService.start(ServerService.this);
+        }, 1000);
     }
 
     private boolean runServerAttempt() throws Exception {

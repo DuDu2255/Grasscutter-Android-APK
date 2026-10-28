@@ -201,6 +201,15 @@ public class MainActivity extends Activity {
 
     private void openBackgroundSettings() {
         try {
+            if (android.os.Build.VERSION.SDK_INT >= 23) {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                    Intent request = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    request.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(request);
+                    return;
+                }
+            }
             startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
         } catch (Exception e) {
             toast("无法打开电池优化设置：" + e.getMessage());
@@ -272,6 +281,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // The OS may reclaim the service while the user is in battery/background
+        // settings. Restore only a server the user had explicitly asked to run.
+        if (Prefs.serverWanted(this) && !ServerService.running) {
+            ServerService.start(this);
+        }
         handler.post(tick);
     }
 

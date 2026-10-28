@@ -15,4 +15,12 @@ public final class Prefs {
     public static void setAutostart(Context c, boolean v) {
         sp(c).edit().putBoolean("autostart", v).apply();
     }
+
+    public static boolean serverWanted(Context c) {
+        return sp(c).getBoolean("server_wanted", false);
+    }
+
+    public static void setServerWanted(Context c, boolean v) {
+        sp(c).edit().putBoolean("server_wanted", v).apply();
+    }
 }
