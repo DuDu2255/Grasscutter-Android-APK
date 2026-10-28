@@ -513,15 +513,16 @@ public class ServerService extends Service {
     private boolean ensureResources() {
         try {
             File target = configuredResourcesTarget();
-            File importedZip = new File(files(), "Resources.zip");
+            File importedZip = importedResourcesZip();
             File legacyZip = new File(serverDir(), "Resources.zip");
             if (isZipPath(target)) {
                 File source = importedZip.isFile() ? importedZip : legacyZip;
-                if (source.isFile() && !source.equals(target)) {
-                    replaceFile(source, target);
+                if (source.isFile() && !sameFile(source, target)) {
+                    copyFileVerified(source, target);
                 }
                 if (!target.isFile() || target.length() < 100L * 1024 * 1024) {
-                    setStatus("还没有有效资源包 " + getConfiguredResourcesPath(this) + "，先点「导入资源包」");
+                    log("Resource archive missing or incomplete: " + target.getAbsolutePath());
+                    setStatus("资源包未放置到 " + getConfiguredResourcesPath(this) + "，请重新导入资源包");
                     return false;
                 }
                 setStatus("ZIP 资源包已就绪：" + getConfiguredResourcesPath(this));
@@ -552,15 +553,43 @@ public class ServerService extends Service {
         }
     }
 
-    private static void replaceFile(File source, File target) throws IOException {
+    private static boolean sameFile(File first, File second) throws IOException {
+        return first.getCanonicalFile().equals(second.getCanonicalFile());
+    }
+
+    private File importedResourcesZip() {
+        File current = new File(files(), "Resources.zip");
+        if (current.isFile()) return current;
+        File legacyImport = new File(files(), "import/Resources.zip");
+        return legacyImport.isFile() ? legacyImport : current;
+    }
+
+    /** Copy across the app/rootfs boundary and verify the destination before the server starts. */
+    private static void copyFileVerified(File source, File target) throws IOException {
+        if (!source.isFile()) throw new IOException("资源包不存在：" + source.getAbsolutePath());
         File parent = target.getParentFile();
         if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("无法创建资源目录");
-        if (target.exists() && !target.delete()) throw new IOException("无法替换旧资源包");
-        if (!source.renameTo(target)) {
-            try (InputStream in = new FileInputStream(source)) {
-                Util.copy(in, target);
-            }
-            if (!source.delete()) source.deleteOnExit();
+        File temporary = new File(parent, "." + target.getName() + ".copying");
+        if (temporary.exists() && !temporary.delete()) {
+            throw new IOException("无法清理临时资源包");
+        }
+        try (InputStream in = new FileInputStream(source)) {
+            Util.copy(in, temporary);
+        }
+        if (temporary.length() != source.length()) {
+            temporary.delete();
+            throw new IOException("资源包复制不完整");
+        }
+        if (target.exists() && !target.delete()) {
+            temporary.delete();
+            throw new IOException("无法替换旧资源包");
+        }
+        if (!temporary.renameTo(target)) {
+            temporary.delete();
+            throw new IOException("无法放置资源包：" + target.getAbsolutePath());
+        }
+        if (!target.isFile() || target.length() != source.length()) {
+            throw new IOException("资源包目标文件校验失败：" + target.getAbsolutePath());
         }
     }
 
@@ -771,6 +800,7 @@ public class ServerService extends Service {
 
     private boolean runServerAttempt() throws Exception {
         if (stopRequested) return false;
+        waitForImports();
         if (!importedJar().isFile() || importedJar().length() == 0) {
             if (jarFile().isFile() && !jarFile().delete()) {
                 log("Unable to remove the previous bundled Grasscutter JAR");
@@ -874,6 +904,20 @@ public class ServerService extends Service {
         } catch (InterruptedException e) {
             if (stopRequested) return false;
             throw e;
+        }
+    }
+
+    private void waitForImports() throws IOException, InterruptedException {
+        for (int i = 0; i < 1200; i++) {
+            synchronized (this) {
+                if (activeImports == 0) return;
+            }
+            if (stopRequested) return;
+            if (i % 8 == 0) setStatus("正在完成导入操作…");
+            Thread.sleep(500);
+        }
+        synchronized (this) {
+            if (activeImports != 0) throw new IOException("导入操作仍在进行，请稍后再启动");
         }
     }
 
